@@ -41,6 +41,8 @@ curriculum = [
         'real_dataset_path': 'data/medium/real_images',
         'transform': transforms.Compose([
             transforms.Resize((32, 32)),
+            transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1),
+            transforms.RandomHorizontalFlip(),
             transforms.ToTensor()
         ])
     },
@@ -49,6 +51,10 @@ curriculum = [
         'real_dataset_path': 'data/hard/real_images',
         'transform': transforms.Compose([
             transforms.Resize((32, 32)),
+            transforms.RandomRotation(30),
+            transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.2),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomVerticalFlip(),
             transforms.ToTensor()
         ])
     }
