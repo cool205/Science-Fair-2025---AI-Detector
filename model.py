@@ -4,6 +4,8 @@ from torchvision import datasets, transforms
 
 import torch.nn as nn
 import torch.optim as optim
+import torch.quantization
+import torch.onnx
 
 # Example model (replace with your own architecture)
 class SimpleCNN(nn.Module):
@@ -88,7 +90,26 @@ def main():
             train(model, dataloader, criterion, optimizer, device)
             print(f"Epoch {epoch+1} completed for stage {stage+1}")
 
-    torch.save(model.state_dict(), 'ai_detector_model.pth')
+
+    # Quantize the model for size reduction
+    model.eval()
+    quantized_model = torch.quantization.quantize_dynamic(
+        model, {nn.Linear}, dtype=torch.qint8
+    )
+
+    # Export to ONNX
+    dummy_input = torch.randn(1, 3, 32, 32, device=device)
+    onnx_path = 'ai_detector_model_quantized.onnx'
+    torch.onnx.export(
+        quantized_model,
+        dummy_input,
+        onnx_path,
+        input_names=['input'],
+        output_names=['output'],
+        opset_version=12,
+        do_constant_folding=True
+    )
+    print(f"Quantized ONNX model saved to {onnx_path}")
 
 if __name__ == "__main__":
     main()
