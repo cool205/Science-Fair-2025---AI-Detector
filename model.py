@@ -1,6 +1,8 @@
+
 import torch
 from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms, models
+from tqdm import tqdm
 
 import torch.nn as nn
 import torch.optim as optim
@@ -10,11 +12,9 @@ import torch.onnx
 # Use MobileNetV2 as the model architecture
 def get_mobilenetv2(num_classes=2):
     model = models.mobilenet_v2(weights=None)
-    # Replace the classifier to match the number of output classes
     model.classifier[1] = nn.Linear(model.last_channel, num_classes)
     return model
 
-# Curriculum: list of dataset difficulties (easy to hard)
 curriculum = [
     {
         'ai_dataset_path': 'data/easy/ai_images',
@@ -48,9 +48,11 @@ curriculum = [
     }
 ]
 
-def train(model, dataloader, criterion, optimizer, device):
+def train(model, dataloader, criterion, optimizer, device, epoch=None, stage=None):
     model.train()
-    for images, labels in dataloader:
+    total = len(dataloader)
+    desc = f"Stage {stage+1} Epoch {epoch+1}" if stage is not None and epoch is not None else "Training"
+    for images, labels in tqdm(dataloader, desc=desc, leave=False):
         images, labels = images.to(device), labels.to(device)
         optimizer.zero_grad()
         outputs = model(images)
@@ -73,7 +75,7 @@ def main():
         dataloader = DataLoader(combined_dataset, batch_size=32, shuffle=True)
 
         for epoch in range(3):  # epochs per curriculum stage
-            train(model, dataloader, criterion, optimizer, device)
+            train(model, dataloader, criterion, optimizer, device, epoch=epoch, stage=stage)
             print(f"Epoch {epoch+1} completed for stage {stage+1}")
 
     # Quantize the model for size reduction
