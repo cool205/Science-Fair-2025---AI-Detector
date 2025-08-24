@@ -1,33 +1,18 @@
-
 import torch
 from torch.utils.data import DataLoader, Subset
-from torchvision import datasets, transforms
+from torchvision import datasets, transforms, models
 
 import torch.nn as nn
 import torch.optim as optim
 import torch.quantization
 import torch.onnx
 
-# Example model (replace with your own architecture)
-class SimpleCNN(nn.Module):
-    def __init__(self):
-        super(SimpleCNN, self).__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(3, 16, 3, padding=1), nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(16, 32, 3, padding=1), nn.ReLU(),
-            nn.MaxPool2d(2)
-        )
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(32 * 8 * 8, 64), nn.ReLU(),
-            nn.Linear(64, 2)
-        )
-
-    def forward(self, x):
-        x = self.features(x)
-        x = self.classifier(x)
-        return x
+# Use MobileNetV2 as the model architecture
+def get_mobilenetv2(num_classes=2):
+    model = models.mobilenet_v2(weights=None)
+    # Replace the classifier to match the number of output classes
+    model.classifier[1] = nn.Linear(model.last_channel, num_classes)
+    return model
 
 # Curriculum: list of dataset difficulties (easy to hard)
 curriculum = [
@@ -75,7 +60,7 @@ def train(model, dataloader, criterion, optimizer, device):
 
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = SimpleCNN().to(device)
+    model = get_mobilenetv2(num_classes=2).to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
@@ -90,7 +75,6 @@ def main():
         for epoch in range(3):  # epochs per curriculum stage
             train(model, dataloader, criterion, optimizer, device)
             print(f"Epoch {epoch+1} completed for stage {stage+1}")
-
 
     # Quantize the model for size reduction
     model.eval()
