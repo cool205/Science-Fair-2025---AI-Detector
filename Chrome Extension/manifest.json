@@ -6,9 +6,9 @@
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "icon128.png",
-      "48": "icon128.png",
-      "128": "icon128.png"
+      "16": "duck_AI_Logo.png",
+      "48": "duck_AI_Logo.png",
+      "128": "duck_AI_Logo.png"
     }
   },
   "permissions": []
