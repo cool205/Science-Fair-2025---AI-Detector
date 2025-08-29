@@ -6,9 +6,9 @@
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "duck_AI_Logo.png",
-      "48": "duck_AI_Logo.png",
-      "128": "duck_AI_Logo.png"
+      "16": "QuackScanAILogo.png",
+      "48": "QuackScanAILogo.png",
+      "128": "QuackScanAILogo.png"
     }
   },
   "permissions": []
