@@ -86,7 +86,7 @@ def main():
 
     # Export to ONNX
     dummy_input = torch.randn(1, 3, 32, 32, device=device)
-    onnx_path = 'ai_detector_model_quantized.onnx'
+    onnx_path = 'quack_scan_model.onnx'
     torch.onnx.export(
         quantized_model,
         dummy_input,
