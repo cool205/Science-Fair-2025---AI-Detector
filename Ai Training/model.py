@@ -9,6 +9,8 @@ import torch.optim as optim
 import torch.quantization
 import torch.onnx
 
+import os
+
 print("Program Running")
 
 # Use MobileNetV2 as the model architecture
@@ -46,6 +48,21 @@ curriculum = [
         ])
     }
 ]
+
+
+CHECKPOINT_FN = "model_checkpoint.pth"
+
+def save_checkpoint(epoch, model, optimizer, scheduler=None, scaler=None, filename=CHECKPOINT_FN):
+    checkpoint = {
+        "epoch": epoch,
+        "model_state": model.state_dict(),
+        "opt_state": optimizer.state_dict()
+    }
+    if scheduler is not None:
+        checkpoint["sched_state"] = scheduler.state_dict()
+    if scaler is not None:
+        checkpoint["scaler_state"] = scaler.state_dict()
+    torch.save(checkpoint, filename)
 
 def train(model, dataloader, criterion, optimizer, device, epoch=None, stage=None):
     model.train()
