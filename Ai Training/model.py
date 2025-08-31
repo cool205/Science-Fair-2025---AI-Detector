@@ -21,14 +21,14 @@ def get_mobilenetv2(num_classes=2):
 
 curriculum = [
     {
-        'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\Ai Training\data\easy',
+        'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\easy',
         'transform': transforms.Compose([
             transforms.Resize((32, 32)),
             transforms.ToTensor()
         ])
     },
     {
-        'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\Ai Training\data\medium',
+        'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\medium',
         'transform': transforms.Compose([
             transforms.Resize((32, 32)),
             transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1),
@@ -37,7 +37,7 @@ curriculum = [
         ])
     },
     {
-        'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\Ai Training\data\hard',
+        'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\hard',
         'transform': transforms.Compose([
             transforms.Resize((32, 32)),
             transforms.RandomRotation(30),
