@@ -1,4 +1,4 @@
-#comment
+
 import torch
 from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms, models
@@ -9,6 +9,10 @@ import torch.optim as optim
 import torch.quantization
 import torch.onnx
 
+import os
+
+print("Program Running")
+
 # Use MobileNetV2 as the model architecture
 def get_mobilenetv2(num_classes=2):
     model = models.mobilenet_v2(weights=None)
@@ -17,16 +21,14 @@ def get_mobilenetv2(num_classes=2):
 
 curriculum = [
     {
-        'ai_dataset_path': 'data/easy/ai_images',
-        'real_dataset_path': 'data/easy/real_images',
+        'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\easy',
         'transform': transforms.Compose([
             transforms.Resize((32, 32)),
             transforms.ToTensor()
         ])
     },
     {
-        'ai_dataset_path': 'data/medium/ai_images',
-        'real_dataset_path': 'data/medium/real_images',
+        'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\medium',
         'transform': transforms.Compose([
             transforms.Resize((32, 32)),
             transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1),
@@ -35,8 +37,7 @@ curriculum = [
         ])
     },
     {
-        'ai_dataset_path': 'data/hard/ai_images',
-        'real_dataset_path': 'data/hard/real_images',
+        'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\hard',
         'transform': transforms.Compose([
             transforms.Resize((32, 32)),
             transforms.RandomRotation(30),
@@ -47,6 +48,21 @@ curriculum = [
         ])
     }
 ]
+
+
+CHECKPOINT_FN = "model_checkpoint.pth"
+
+def save_checkpoint(epoch, model, optimizer, scheduler=None, scaler=None, filename=CHECKPOINT_FN):
+    checkpoint = {
+        "epoch": epoch,
+        "model_state": model.state_dict(),
+        "opt_state": optimizer.state_dict()
+    }
+    if scheduler is not None:
+        checkpoint["sched_state"] = scheduler.state_dict()
+    if scaler is not None:
+        checkpoint["scaler_state"] = scaler.state_dict()
+    torch.save(checkpoint, filename)
 
 def train(model, dataloader, criterion, optimizer, device, epoch=None, stage=None):
     model.train()
@@ -68,11 +84,9 @@ def main():
 
     for stage, config in enumerate(curriculum):
         print(f"Stage {stage+1}: Training with curriculum dataset")
-        ai_dataset = datasets.ImageFolder(config['ai_dataset_path'], transform=config['transform'])
-        real_dataset = datasets.ImageFolder(config['real_dataset_path'], transform=config['transform'])
-        # Combine datasets (label 0: real, label 1: AI)
-        combined_dataset = torch.utils.data.ConcatDataset([real_dataset, ai_dataset])
-        dataloader = DataLoader(combined_dataset, batch_size=32, shuffle=True)
+        dataset = datasets.ImageFolder(config['dataset_path'], transform=config['transform'])
+        dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+
 
         for epoch in range(3):  # epochs per curriculum stage
             train(model, dataloader, criterion, optimizer, device, epoch=epoch, stage=stage)
