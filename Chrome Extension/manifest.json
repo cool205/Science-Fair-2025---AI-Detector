@@ -11,5 +11,11 @@
       "128": "QuackScanAILogo.png"
     }
   },
-  "permissions": []
+  "permissions": [],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ]
 }
