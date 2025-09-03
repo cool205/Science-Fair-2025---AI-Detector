@@ -1,0 +1,36 @@
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  margin: 0;
+  padding: 20px;
+  background: #f7f9fa;
+  color: #222;
+  min-width: 250px;
+  min-height: 120px;
+}
+h2 {
+  margin-top: 0;
+  font-size: 1.3em;
+  color: #0078d7;
+  letter-spacing: 1px;
+}
+#result {
+  margin-top: 18px;
+  padding: 12px;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  font-weight: 500;
+  font-size: 1em;
+  min-height: 32px;
+  transition: background 0.2s;
+}
+#result.warning {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeeba;
+}
+#result.safe {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
