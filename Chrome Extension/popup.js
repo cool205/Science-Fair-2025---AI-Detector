@@ -9,10 +9,12 @@ chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'analyze-image-result') {
     const resultDiv = document.getElementById('result');
+    let msg = `Scanned ${message.scannedCount} images.\n`;
     if (message.isAI) {
-      resultDiv.textContent = 'Warning: At least one image on this website might be AI-generated!';
+      msg += 'Warning: At least one image on this website might be AI-generated!';
     } else {
-      resultDiv.textContent = 'No AI-generated images detected.';
+      msg += 'No AI-generated images detected.';
     }
+    resultDiv.textContent = msg;
   }
 });
