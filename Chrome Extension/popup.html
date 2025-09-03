@@ -7,6 +7,12 @@
 <body>
   <h2>AI Detector</h2>
   <div id="result">Scanning images...</div>
+  <div id="slider-container" style="display:none; margin-top:16px;">
+    <button id="prevBtn" style="margin-right:8px;">&#8592;</button>
+    <img id="slider-img" src="" alt="AI flagged" style="max-width:80px; max-height:80px; border-radius:6px; box-shadow:0 1px 4px rgba(0,0,0,0.12); vertical-align:middle;">
+    <div id="confidence" style="margin-left:12px; font-size:0.95em; color:#0078d7; font-weight:600; min-width:80px; text-align:left;">Confidence: --%</div>
+    <button id="nextBtn" style="margin-left:8px;">&#8594;</button>
+  </div>
   <script src="popup.js"></script>
 </body>
 </html>

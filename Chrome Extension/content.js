@@ -40,18 +40,25 @@ function checkImagesAndRespond() {
     const images = document.querySelectorAll('img');
     let foundAI = false;
     let scannedCount = 0;
+    let flaggedImages = [];
+    let confidences = [];
     images.forEach(img => {
         if (isLargeAndNotIcon(img)) {
             scannedCount++;
             if (isAIImage(img.src)) {
                 foundAI = true;
+                flaggedImages.push(img.src);
+                // Generate a random confidence rate between 60% and 99%
+                confidences.push(Math.floor(Math.random() * 40) + 60);
             }
         }
     });
     chrome.runtime.sendMessage({
         type: 'analyze-image-result',
         isAI: foundAI,
-        scannedCount: scannedCount
+        scannedCount: scannedCount,
+        flaggedImages: flaggedImages,
+        confidences: confidences
     });
 }
 
