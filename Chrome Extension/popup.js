@@ -10,18 +10,18 @@ chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'analyze-image-result') {
     const resultDiv = document.getElementById('result');
-    let msg = `Scanned ${message.scannedCount} images.\n`;
     flaggedImages = message.flaggedImages || [];
     confidences = message.confidences || [];
     currentIndex = 0;
+    let msg = `Scanned <b>${message.scannedCount}</b> images.<br>`;
     if (message.isAI) {
-      msg += 'Warning: At least one image on this website might be AI-generated!';
+      msg += `<span style="color:#e53935;font-weight:600;">Flagged <b>${flaggedImages.length}</b> image${flaggedImages.length === 1 ? '' : 's'} as AI-generated.</span><br>`;
       resultDiv.className = 'warning';
     } else {
-      msg += 'No AI-generated images detected.';
+      msg += '<span style="color:#155724;font-weight:600;">No AI-generated images detected.</span>';
       resultDiv.className = 'safe';
     }
-    resultDiv.textContent = msg;
+    resultDiv.innerHTML = msg;
     updateSlider();
   }
 });

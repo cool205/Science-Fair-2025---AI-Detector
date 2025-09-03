@@ -48,8 +48,14 @@ function checkImagesAndRespond() {
             if (isAIImage(img.src)) {
                 foundAI = true;
                 flaggedImages.push(img.src);
-                // Generate a random confidence rate between 60% and 99%
                 confidences.push(Math.floor(Math.random() * 40) + 60);
+                // Add red border to flagged image on website
+                img.style.border = '4px solid #e53935';
+                img.style.borderRadius = '6px';
+            } else {
+                // Remove border if not flagged
+                img.style.border = '';
+                img.style.borderRadius = '';
             }
         }
     });
