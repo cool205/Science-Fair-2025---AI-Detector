@@ -5,7 +5,7 @@ from torchvision import transforms
 from PIL import Image
 import matplotlib.pyplot as plt
 import os
-from model import curriculum
+from model_training import curriculum
 
 # Load ONNX model
 onnx_path = 'ai_detector_model_quantized.onnx'
