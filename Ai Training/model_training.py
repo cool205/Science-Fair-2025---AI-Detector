@@ -62,6 +62,12 @@ curriculum = [
 ]
 
 CHECKPOINT_FN = "model_checkpoint.pth"
+LOG_FILE = "accuracy_log.txt"  # File to save training and validation accuracies
+
+def get_model_size(model, model_filename="model.pth"):
+    torch.save(model, model_filename)  # Save the entire model
+    model_size = os.path.getsize(model_filename) / (1024 ** 2)  # MB
+    print(f"Model size: {model_size:.2f} MB")
 
 def save_checkpoint(epoch, model, optimizer, scheduler=None, scaler=None, filename=CHECKPOINT_FN):
     checkpoint = {
@@ -74,7 +80,7 @@ def save_checkpoint(epoch, model, optimizer, scheduler=None, scaler=None, filena
     if scaler is not None:
         checkpoint["scaler_state"] = scaler.state_dict()
     torch.save(checkpoint, filename)
-    print(f"Checkpoint saved at epoch {epoch}")
+    print(f"Checkpoint saved at epoch {epoch+1}")
 
 def train(model, dataloader, criterion, optimizer, device, epoch=None, stage=None):
     model.train()
@@ -121,6 +127,11 @@ def validate(model, dataloader, criterion, device, epoch=None, stage=None):
     print(f"Epoch {epoch+1} Validation Loss: {avg_loss:.4f}, Validation Accuracy: {val_accuracy*100:.2f}%")
     return val_accuracy, avg_loss
 
+def log_accuracies(epoch, train_accuracy, val_accuracy, log_file=LOG_FILE):
+    with open(log_file, 'a') as f:
+        f.write(f"Epoch {epoch+1}, Train Accuracy: {train_accuracy*100:.2f}%, Validation Accuracy: {val_accuracy*100:.2f}%\n")
+    print(f"Accuracies logged for epoch {epoch+1}.")
+
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = get_mobilenetv2(num_classes=2, dropout_rate=dropout_rate).to(device)
@@ -133,38 +144,64 @@ def main():
     else:
         raise ValueError(f"Unsupported optimizer: {optimizer_choice}")
 
+    # Load checkpoint if exists
+    if os.path.exists(CHECKPOINT_FN):
+        print(f"Loading checkpoint from {CHECKPOINT_FN}")
+        checkpoint = torch.load(CHECKPOINT_FN)
+        model.load_state_dict(checkpoint["model_state"])
+        optimizer.load_state_dict(checkpoint["opt_state"])
+        start_epoch = checkpoint["epoch"] + 1
+        print(f"Resuming from epoch {start_epoch}")
+    else:
+        start_epoch = 0
+        print("No checkpoint found, starting from scratch.")
+
+    # Log header to file
+    with open(LOG_FILE, 'w') as f:
+        f.write("Epoch, Train Accuracy, Validation Accuracy\n")
+
     for stage, config in enumerate(curriculum):
-        print(f"Stage {stage+1}: Training with curriculum dataset")
         dataset = datasets.ImageFolder(config['dataset_path'], transform=config['transform'])
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-        for epoch in range(5):  # 5 epochs per stage
-            print(f"Training epoch {epoch+1}")
+        for epoch in range(start_epoch, 15):  # 15 epochs per stage
             train_accuracy, train_loss = train(model, dataloader, criterion, optimizer, device, epoch=epoch, stage=stage)
             val_accuracy, val_loss = validate(model, dataloader, criterion, device, epoch=epoch, stage=stage)
 
+            # Log accuracies to file
+            log_accuracies(epoch, train_accuracy, val_accuracy)
+
             # Save checkpoint after each epoch
             save_checkpoint(epoch, model, optimizer)
+            get_model_size(model, model_filename=CHECKPOINT_FN)  # Model size after checkpoint
 
     # Quantize the model for size reduction
+    dummy_input = torch.randn(1, 3, 32, 32)  # Batch size of 1, 3 channels, 32x32 image size
     model.eval()
     quantized_model = torch.quantization.quantize_dynamic(
         model, {nn.Linear}, dtype=torch.qint8
     )
 
-    # Export to ONNX
-    dummy_input = torch.randn(1, 3, 32, 32, device=device)
-    onnx_path = 'quack_scan_model.onnx'
+    # Ensure the model is on the CPU before quantization
+    device = torch.device('cpu')
+    model.to(device)
+
+    # Now apply the quantization (example for dynamic quantization)
+    quantized_model = torch.quantization.quantize_dynamic(
+        model,  # Your model
+        {torch.nn.Linear},  # Layers to quantize (e.g., Linear layers)
+        dtype=torch.qint8  # The dtype for quantization
+    )
+
+    # Export the quantized model to ONNX
     torch.onnx.export(
         quantized_model,
-        dummy_input,
-        onnx_path,
-        input_names=['input'],
-        output_names=['output'],
+        dummy_input,  # Example input
+        'quantized_model.onnx',
+        export_params=True,
         opset_version=12,
         do_constant_folding=True
     )
-    print(f"Quantized ONNX model saved to {onnx_path}")
 
 if __name__ == "__main__":
     main()
