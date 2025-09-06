@@ -4,13 +4,9 @@ from torchvision import transforms
 
 # Define the image transformation with the requested transforms
 transform = transforms.Compose([
-    transforms.Resize((32, 32)),  # Resize to 32x32
-    transforms.RandomRotation(30),  # Randomly rotate the image by 30 degrees
-    transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.2),  # Adjust brightness, contrast, saturation, and hue
-    transforms.RandomHorizontalFlip(),  # Randomly flip the image horizontally
-    transforms.RandomVerticalFlip(),  # Randomly flip the image vertically
-    transforms.ToTensor()  # Convert the image to a tensor
-])
+            transforms.Resize((32, 32)),
+            transforms.ToTensor()
+        ])
 
 # Load an image manually (replace with actual image path)
 image_path = r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\easy\ai_images\1009 (5).jpg'  # Adjust the path

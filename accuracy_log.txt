@@ -1,0 +1,16 @@
+Epoch, Train Accuracy, Validation Accuracy
+Epoch 1, Train Accuracy: 67.06%, Validation Accuracy: 75.90%
+Epoch 2, Train Accuracy: 78.07%, Validation Accuracy: 80.45%
+Epoch 3, Train Accuracy: 82.24%, Validation Accuracy: 83.80%
+Epoch 4, Train Accuracy: 84.57%, Validation Accuracy: 85.20%
+Epoch 5, Train Accuracy: 85.79%, Validation Accuracy: 84.92%
+Epoch 1, Train Accuracy: 81.38%, Validation Accuracy: 82.97%
+Epoch 2, Train Accuracy: 83.39%, Validation Accuracy: 84.62%
+Epoch 3, Train Accuracy: 83.97%, Validation Accuracy: 85.60%
+Epoch 4, Train Accuracy: 85.12%, Validation Accuracy: 84.47%
+Epoch 5, Train Accuracy: 86.41%, Validation Accuracy: 86.50%
+Epoch 1, Train Accuracy: 78.26%, Validation Accuracy: 78.53%
+Epoch 2, Train Accuracy: 80.86%, Validation Accuracy: 79.47%
+Epoch 3, Train Accuracy: 80.80%, Validation Accuracy: 79.97%
+Epoch 4, Train Accuracy: 81.82%, Validation Accuracy: 80.85%
+Epoch 5, Train Accuracy: 82.21%, Validation Accuracy: 83.78%

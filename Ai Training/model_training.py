@@ -1,13 +1,10 @@
 import torch
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, random_split
 from torchvision import datasets, transforms, models
 from tqdm import tqdm
 
 import torch.nn as nn
 import torch.optim as optim
-import torch.quantization
-import torch.onnx
-
 import os
 
 print("Program Running")
@@ -26,61 +23,60 @@ def get_mobilenetv2(num_classes=2, dropout_rate=0.5):
 
 # Hyperparameter Tuning Variables
 learning_rate = 0.001
-batch_size = 32
+batch_size = 64
 optimizer_choice = "adam"  # Options: "adam", "sgd"
-dropout_rate = 0.5  # Dropout rate (can be adjusted)
+dropout_rate = 0.6  # Dropout rate (can be adjusted)
 
 # Curriculum configuration
 curriculum = [
     {
         'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\easy',
-        'transform': transforms.Compose([
+        'train_transform': transforms.Compose([  # Augmentations for training
+            transforms.Resize((32, 32)),
+            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.0),
+            transforms.ToTensor()
+        ]),
+        'val_transform': transforms.Compose([  # No augmentations for validation
             transforms.Resize((32, 32)),
             transforms.ToTensor()
-        ])
+        ]) 
     },
     {
         'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\medium',
-        'transform': transforms.Compose([
+        'train_transform': transforms.Compose([  # Augmentations for training
             transforms.Resize((32, 32)),
             transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor()
-        ])
+        ]),
+        'val_transform': transforms.Compose([  # No augmentations for validation
+            transforms.Resize((32, 32)),
+            transforms.ToTensor()
+        ])  
     },
     {
         'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\hard',
-        'transform': transforms.Compose([
+        'train_transform': transforms.Compose([  # Augmentations for training
             transforms.Resize((32, 32)),
             transforms.RandomRotation(30),
             transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.2),
             transforms.RandomHorizontalFlip(),
             transforms.RandomVerticalFlip(),
             transforms.ToTensor()
-        ])
+        ]),
+        'val_transform': transforms.Compose([  # No augmentations for validation
+            transforms.Resize((32, 32)),
+            transforms.ToTensor()
+        ])  
     }
 ]
 
-CHECKPOINT_FN = "model_checkpoint.pth"
 LOG_FILE = "accuracy_log.txt"  # File to save training and validation accuracies
 
 def get_model_size(model, model_filename="model.pth"):
-    torch.save(model, model_filename)  # Save the entire model
+    torch.save(model.state_dict(), model_filename)  # Save model state dict
     model_size = os.path.getsize(model_filename) / (1024 ** 2)  # MB
     print(f"Model size: {model_size:.2f} MB")
-
-def save_checkpoint(epoch, model, optimizer, scheduler=None, scaler=None, filename=CHECKPOINT_FN):
-    checkpoint = {
-        "epoch": epoch,
-        "model_state": model.state_dict(),
-        "opt_state": optimizer.state_dict()
-    }
-    if scheduler is not None:
-        checkpoint["sched_state"] = scheduler.state_dict()
-    if scaler is not None:
-        checkpoint["scaler_state"] = scaler.state_dict()
-    torch.save(checkpoint, filename)
-    print(f"Checkpoint saved at epoch {epoch+1}")
 
 def train(model, dataloader, criterion, optimizer, device, epoch=None, stage=None):
     model.train()
@@ -144,36 +140,34 @@ def main():
     else:
         raise ValueError(f"Unsupported optimizer: {optimizer_choice}")
 
-    # Load checkpoint if exists
-    if os.path.exists(CHECKPOINT_FN):
-        print(f"Loading checkpoint from {CHECKPOINT_FN}")
-        checkpoint = torch.load(CHECKPOINT_FN)
-        model.load_state_dict(checkpoint["model_state"])
-        optimizer.load_state_dict(checkpoint["opt_state"])
-        start_epoch = checkpoint["epoch"] + 1
-        print(f"Resuming from epoch {start_epoch}")
-    else:
-        start_epoch = 0
-        print("No checkpoint found, starting from scratch.")
-
     # Log header to file
     with open(LOG_FILE, 'w') as f:
         f.write("Epoch, Train Accuracy, Validation Accuracy\n")
 
     for stage, config in enumerate(curriculum):
-        dataset = datasets.ImageFolder(config['dataset_path'], transform=config['transform'])
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        # Load the dataset and split into train and validation
+        dataset = datasets.ImageFolder(config['dataset_path'], transform=config['train_transform'])
+        train_size = int(0.8 * len(dataset))  # 80% for training
+        val_size = len(dataset) - train_size  # 20% for validation
+        train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
 
-        for epoch in range(start_epoch, 15):  # 15 epochs per stage
-            train_accuracy, train_loss = train(model, dataloader, criterion, optimizer, device, epoch=epoch, stage=stage)
-            val_accuracy, val_loss = validate(model, dataloader, criterion, device, epoch=epoch, stage=stage)
+        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
+        for epoch in range(5):  # 5 epochs per stage
+            train_accuracy, train_loss = train(model, train_dataloader, criterion, optimizer, device, epoch=epoch, stage=stage)
+            val_accuracy, val_loss = validate(model, val_dataloader, criterion, device, epoch=epoch, stage=stage)
 
             # Log accuracies to file
             log_accuracies(epoch, train_accuracy, val_accuracy)
 
-            # Save checkpoint after each epoch
-            save_checkpoint(epoch, model, optimizer)
-            get_model_size(model, model_filename=CHECKPOINT_FN)  # Model size after checkpoint
+            # Optional: Get model size after each epoch (can be commented out)
+            # get_model_size(model, model_filename=f"model_epoch_{epoch+1}.pth")  # Model size after each epoch
+
+        # Save the model after the final epoch of the last stage
+        if stage == len(curriculum) - 1 and epoch == 4:  # Final epoch of final stage
+            torch.save(model.state_dict(), "final_model.pth")
+            print(f"Model saved after final epoch: Epoch {epoch+1}")
 
     # Quantize the model for size reduction
     dummy_input = torch.randn(1, 3, 32, 32)  # Batch size of 1, 3 channels, 32x32 image size
@@ -186,7 +180,7 @@ def main():
     device = torch.device('cpu')
     model.to(device)
 
-    # Now apply the quantization (example for dynamic quantization)
+    # Apply the quantization
     quantized_model = torch.quantization.quantize_dynamic(
         model,  # Your model
         {torch.nn.Linear},  # Layers to quantize (e.g., Linear layers)
