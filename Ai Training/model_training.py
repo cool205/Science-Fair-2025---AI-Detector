@@ -26,6 +26,7 @@ learning_rate = 0.001
 batch_size = 64
 optimizer_choice = "adam"  # Options: "adam", "sgd"
 dropout_rate = 0.6  # Dropout rate (can be adjusted)
+epochs_per_stage = 5  # Number of epochs per curriculum stage
 
 # Curriculum configuration
 curriculum = [
@@ -154,7 +155,7 @@ def main():
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
-        for epoch in range(5):  # 5 epochs per stage
+        for epoch in range(epochs_per_stage):  # 5 epochs per stage
             train_accuracy, train_loss = train(model, train_dataloader, criterion, optimizer, device, epoch=epoch, stage=stage)
             val_accuracy, val_loss = validate(model, val_dataloader, criterion, device, epoch=epoch, stage=stage)
 
