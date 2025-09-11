@@ -46,7 +46,7 @@ curriculum = [
         'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\medium',
         'train_transform': transforms.Compose([  # Augmentations for training
             transforms.Resize((32, 32)),
-            transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1),
+            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor()
         ]),
@@ -60,7 +60,7 @@ curriculum = [
         'train_transform': transforms.Compose([  # Augmentations for training
             transforms.Resize((32, 32)),
             transforms.RandomRotation(30),
-            transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.2),
+            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
             transforms.RandomHorizontalFlip(),
             transforms.RandomVerticalFlip(),
             transforms.ToTensor()
@@ -146,57 +146,45 @@ def main():
         f.write("Epoch, Train Accuracy, Validation Accuracy\n")
 
     for stage, config in enumerate(curriculum):
-        # Load the dataset and split into train and validation
         dataset = datasets.ImageFolder(config['dataset_path'], transform=config['train_transform'])
-        train_size = int(0.8 * len(dataset))  # 80% for training
-        val_size = len(dataset) - train_size  # 20% for validation
+        train_size = int(0.8 * len(dataset))
+        val_size = len(dataset) - train_size
         train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
 
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
-        for epoch in range(epochs_per_stage):  # 5 epochs per stage
+        for epoch in range(epochs_per_stage):
             train_accuracy, train_loss = train(model, train_dataloader, criterion, optimizer, device, epoch=epoch, stage=stage)
             val_accuracy, val_loss = validate(model, val_dataloader, criterion, device, epoch=epoch, stage=stage)
-
-            # Log accuracies to file
             log_accuracies(epoch, train_accuracy, val_accuracy)
 
-            # Optional: Get model size after each epoch (can be commented out)
-            # get_model_size(model, model_filename=f"model_epoch_{epoch+1}.pth")  # Model size after each epoch
-
-        # Save the model after the final epoch of the last stage
-        if stage == len(curriculum) - 1 and epoch == 4:  # Final epoch of final stage
+        if stage == len(curriculum) - 1 and epoch == 4:
             torch.save(model.state_dict(), "final_model.pth")
             print(f"Model saved after final epoch: Epoch {epoch+1}")
 
-    # Quantize the model for size reduction
-    dummy_input = torch.randn(1, 3, 32, 32)  # Batch size of 1, 3 channels, 32x32 image size
+    # Export non-quantized model to ONNX
+    dummy_input = torch.randn(1, 3, 32, 32)
     model.eval()
-    quantized_model = torch.quantization.quantize_dynamic(
-        model, {nn.Linear}, dtype=torch.qint8
-    )
+    model.cpu()
 
-    # Ensure the model is on the CPU before quantization
-    device = torch.device('cpu')
-    model.to(device)
-
-    # Apply the quantization
-    quantized_model = torch.quantization.quantize_dynamic(
-        model,  # Your model
-        {torch.nn.Linear},  # Layers to quantize (e.g., Linear layers)
-        dtype=torch.qint8  # The dtype for quantization
-    )
-
-    # Export the quantized model to ONNX
     torch.onnx.export(
-        quantized_model,
-        dummy_input,  # Example input
-        'quantized_model.onnx',
+        model,
+        dummy_input,
+        "model_fp32.onnx",
         export_params=True,
-        opset_version=12,
+        opset_version=17,
+        input_names=["input"],
+        output_names=["output"],
+        dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}},
         do_constant_folding=True
     )
+
+    print("FP32 model exported to ONNX.")
+
+if __name__ == "__main__":
+    main()
+
 
 if __name__ == "__main__":
     main()
