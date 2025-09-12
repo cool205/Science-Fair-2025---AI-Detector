@@ -1,23 +1,24 @@
+
 import torch
 from torch.utils.data import DataLoader, random_split
 from torchvision import datasets, transforms, models
 from tqdm import tqdm
-
 import torch.nn as nn
 import torch.optim as optim
 import os
+import numpy as np
 
 print("Program Running")
 
-# Use MobileNetV2 as the model architecture
-def get_mobilenetv2(num_classes=2, dropout_rate=0.5):
+# Use MobileNetV2 as the model architecture with adjustments for overfitting prevention
+def get_mobilenetv2(num_classes=2, dropout_rate=0.5):  # Increased dropout rate for regularization
     model = models.mobilenet_v2(weights=None)
     # Add dropout after the classifier layer
     model.classifier[1] = nn.Sequential(
-        nn.Linear(model.last_channel, 1280),  # Original output size
-        nn.Dropout(dropout_rate),  # Add dropout layer with configurable rate
+        nn.Linear(model.last_channel, 1280),
+        nn.Dropout(dropout_rate),
         nn.ReLU(inplace=True),
-        nn.Linear(1280, num_classes)  # Final classification layer
+        nn.Linear(1280, num_classes)
     )
     return model
 
@@ -25,47 +26,50 @@ def get_mobilenetv2(num_classes=2, dropout_rate=0.5):
 learning_rate = 0.001
 batch_size = 64
 optimizer_choice = "adam"  # Options: "adam", "sgd"
-dropout_rate = 0.6  # Dropout rate (can be adjusted)
-epochs_per_stage = 5  # Number of epochs per curriculum stage
+dropout_rate = 0.5  # Increased dropout rate
+epochs_per_stage = 7
 
-# Curriculum configuration
+# Curriculum configuration (with data augmentation changes)
 curriculum = [
     {
         'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\easy',
-        'train_transform': transforms.Compose([  # Augmentations for training
+        'train_transform': transforms.Compose([
             transforms.Resize((32, 32)),
             transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.0),
+            transforms.RandomHorizontalFlip(),  # Added horizontal flip for data augmentation
+            transforms.RandomRotation(15),  # Added small rotation to make the data more robust
             transforms.ToTensor()
         ]),
-        'val_transform': transforms.Compose([  # No augmentations for validation
+        'val_transform': transforms.Compose([
             transforms.Resize((32, 32)),
             transforms.ToTensor()
-        ]) 
+        ])
     },
     {
         'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\medium',
-        'train_transform': transforms.Compose([  # Augmentations for training
+        'train_transform': transforms.Compose([
             transforms.Resize((32, 32)),
             transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
             transforms.RandomHorizontalFlip(),
+            transforms.RandomRotation(20),  # Increased rotation range for better augmentation
             transforms.ToTensor()
         ]),
-        'val_transform': transforms.Compose([  # No augmentations for validation
+        'val_transform': transforms.Compose([
             transforms.Resize((32, 32)),
             transforms.ToTensor()
         ])  
     },
     {
         'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\hard',
-        'train_transform': transforms.Compose([  # Augmentations for training
+        'train_transform': transforms.Compose([
             transforms.Resize((32, 32)),
-            transforms.RandomRotation(30),
+            transforms.RandomRotation(15),  # Moderate rotation range for more generalization
             transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
             transforms.RandomHorizontalFlip(),
-            transforms.RandomVerticalFlip(),
+            transforms.RandomVerticalFlip(),  # Added vertical flip
             transforms.ToTensor()
         ]),
-        'val_transform': transforms.Compose([  # No augmentations for validation
+        'val_transform': transforms.Compose([
             transforms.Resize((32, 32)),
             transforms.ToTensor()
         ])  
@@ -129,62 +133,106 @@ def log_accuracies(epoch, train_accuracy, val_accuracy, log_file=LOG_FILE):
         f.write(f"Epoch {epoch+1}, Train Accuracy: {train_accuracy*100:.2f}%, Validation Accuracy: {val_accuracy*100:.2f}%\n")
     print(f"Accuracies logged for epoch {epoch+1}.")
 
+# Early stopping
+def early_stopping(val_accuracy, best_val_accuracy, patience, counter):
+    if val_accuracy > best_val_accuracy:
+        best_val_accuracy = val_accuracy
+        counter = 0  # Reset counter when improvement occurs
+    else:
+        counter += 1
+    if counter >= patience:
+        print("Early stopping triggered")
+        return True, best_val_accuracy, counter
+    return False, best_val_accuracy, counter
+
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = get_mobilenetv2(num_classes=2, dropout_rate=dropout_rate).to(device)
     criterion = nn.CrossEntropyLoss()
 
     if optimizer_choice == "adam":
-        optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+        optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)  # Added weight decay
     elif optimizer_choice == "sgd":
-        optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+        optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=1e-4)  # Added weight decay
     else:
         raise ValueError(f"Unsupported optimizer: {optimizer_choice}")
+
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)  # Learning rate scheduler
 
     # Log header to file
     with open(LOG_FILE, 'w') as f:
         f.write("Epoch, Train Accuracy, Validation Accuracy\n")
 
+    best_val_accuracy = 0.0
+    patience = 3  # Early stopping patience
+    counter = 0
+
     for stage, config in enumerate(curriculum):
+        # Load the dataset and split into train and validation
         dataset = datasets.ImageFolder(config['dataset_path'], transform=config['train_transform'])
-        train_size = int(0.8 * len(dataset))
-        val_size = len(dataset) - train_size
+        train_size = int(0.8 * len(dataset))  # 80% for training
+        val_size = len(dataset) - train_size  # 20% for validation
         train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
 
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
-        for epoch in range(epochs_per_stage):
+        for epoch in range(epochs_per_stage):  # 7 epochs per stage
             train_accuracy, train_loss = train(model, train_dataloader, criterion, optimizer, device, epoch=epoch, stage=stage)
             val_accuracy, val_loss = validate(model, val_dataloader, criterion, device, epoch=epoch, stage=stage)
+
+            # Log accuracies to file
             log_accuracies(epoch, train_accuracy, val_accuracy)
 
-        if stage == len(curriculum) - 1 and epoch == 4:
-            torch.save(model.state_dict(), "final_model.pth")
-            print(f"Model saved after final epoch: Epoch {epoch+1}")
+            # Early stopping check
+            stop, best_val_accuracy, counter = early_stopping(val_accuracy, best_val_accuracy, patience, counter)
+            if stop:
+                break
 
-    # Export non-quantized model to ONNX
-    dummy_input = torch.randn(1, 3, 32, 32)
+            # Step the learning rate scheduler
+            scheduler.step()
+
+        # Optional: Save the model after each stage (if needed)
+        torch.save(model.state_dict(), f"model_stage_{stage+1}.pth")
+
+    # Fine-tune the model after curriculum learning if needed
+    for param in model.parameters():
+        param.requires_grad = False  # Freeze all layers
+    for param in model.classifier.parameters():  # Only train the classifier
+        param.requires_grad = True
+
+    optimizer = optim.Adam(model.classifier.parameters(), lr=learning_rate / 10)  # Lower learning rate for fine-tuning
+    for epoch in range(5):  # Fine-tune for a few more epochs
+        train_accuracy, train_loss = train(model, train_dataloader, criterion, optimizer, device, epoch=epoch)
+        val_accuracy, val_loss = validate(model, val_dataloader, criterion, device, epoch=epoch)
+
+    # Save the final model
+    torch.save(model.state_dict(), "final_model.pth")
+    print("Model saved after fine-tuning.")
+
+    # Quantize the model for size reduction
+    dummy_input = torch.randn(1, 3, 32, 32)  # Batch size of 1, 3 channels, 32x32 image size
     model.eval()
-    model.cpu()
+    quantized_model = torch.quantization.quantize_dynamic(
+        model, {nn.Linear}, dtype=torch.qint8
+    )
 
+    # Fine-tune after quantization
+    optimizer = optim.Adam(quantized_model.parameters(), lr=learning_rate / 10)  # Lower learning rate for fine-tuning
+    for epoch in range(5):  # Fine-tune the quantized model for a few epochs
+        train_accuracy, train_loss = train(quantized_model, train_dataloader, criterion, optimizer, device, epoch=epoch)
+        val_accuracy, val_loss = validate(quantized_model, val_dataloader, criterion, device, epoch=epoch)
+
+    # Export the quantized model to ONNX
     torch.onnx.export(
-        model,
-        dummy_input,
-        "model_fp32.onnx",
+        quantized_model,
+        dummy_input,  # Example input
+        'quantized_model.onnx',
         export_params=True,
-        opset_version=17,
-        input_names=["input"],
-        output_names=["output"],
-        dynamic_axes={"input": {0: "batch_size"}, "output": {0: "batch_size"}},
+        opset_version=12,
         do_constant_folding=True
     )
 
-    print("FP32 model exported to ONNX.")
-
 if __name__ == "__main__":
     main()
 
-
-if __name__ == "__main__":
-    main()
