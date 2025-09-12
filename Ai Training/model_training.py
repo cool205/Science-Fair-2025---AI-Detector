@@ -51,7 +51,7 @@ curriculum = [
             transforms.Resize((32, 32)),
             transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
             transforms.RandomHorizontalFlip(),
-            transforms.RandomRotation(20),  # Increased rotation range for better augmentation
+            transforms.RandomRotation(15),  # Increased rotation range for better augmentation
             transforms.ToTensor()
         ]),
         'val_transform': transforms.Compose([
@@ -63,7 +63,7 @@ curriculum = [
         'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\hard',
         'train_transform': transforms.Compose([
             transforms.Resize((32, 32)),
-            transforms.RandomRotation(15),  # Moderate rotation range for more generalization
+            transforms.RandomRotation(20),  # Moderate rotation range for more generalization
             transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
             transforms.RandomHorizontalFlip(),
             transforms.RandomVerticalFlip(),  # Added vertical flip
