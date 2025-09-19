@@ -216,7 +216,7 @@ def main():
     quantized_model = torch.quantization.quantize_dynamic(
         model, {nn.Linear}, dtype=torch.qint8
     )
-
+    
     # Fine-tune after quantization
     optimizer = optim.Adam(quantized_model.parameters(), lr=learning_rate / 10)  # Lower learning rate for fine-tuning
     for epoch in range(5):  # Fine-tune the quantized model for a few epochs

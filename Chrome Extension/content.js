@@ -39,10 +39,12 @@ function createAIPopup() {
 
 // === Show/hide popup on hover ===
 function showAIPopup(confidence) {
-    const popup = document.getElementById('ai-confidence-popup');
-    if (popup) {
-        popup.textContent = `AI Confidence: ${confidence}%`;
-        popup.style.opacity = '1';
+    if (confidence > 70){
+       const popup = document.getElementById('ai-confidence-popup');
+        if (popup) {
+            popup.textContent = `AI Confidence: ${confidence}%`;
+            popup.style.opacity = '1';
+        } 
     }
 }
 
