@@ -15,11 +15,6 @@ function isLargeAndNotIcon(img) {
     return true;
 }
 
-// === Fake AI detection function (replace with real model) ===
-function isAIImage(src) {
-    return Math.random() < 0.2; // 20% chance for demo
-}
-
 // === Create the top-right transparent popup ===
 function createAIPopup() {
     const popup = document.createElement('div');
@@ -28,7 +23,7 @@ function createAIPopup() {
     popup.style.top = '12px';
     popup.style.right = '12px';
     popup.style.padding = '10px 16px';
-    popup.style.backgroundColor = 'rgba(229, 57, 53, 0.85)'; // transparent red
+    popup.style.backgroundColor = 'rgba(229, 57, 53, 0.85)';
     popup.style.color = '#fff';
     popup.style.fontSize = '14px';
     popup.style.fontFamily = 'Arial, sans-serif';
@@ -37,8 +32,8 @@ function createAIPopup() {
     popup.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.15)';
     popup.style.backdropFilter = 'blur(4px)';
     popup.style.transition = 'opacity 0.2s ease';
-    popup.style.opacity = '0'; // hidden by default
-    popup.style.pointerEvents = 'none'; // allow mouse to pass through
+    popup.style.opacity = '0';
+    popup.style.pointerEvents = 'none';
     document.body.appendChild(popup);
 }
 
@@ -60,7 +55,6 @@ function hideAIPopup() {
 
 // === Add hover listeners to an image ===
 function attachHoverEvents(img, confidence) {
-    // Prevent adding listeners more than once
     if (img.dataset.aiHoverAttached === 'true') return;
 
     img.addEventListener('mouseenter', () => showAIPopup(confidence));
@@ -68,7 +62,7 @@ function attachHoverEvents(img, confidence) {
     img.dataset.aiHoverAttached = 'true';
 }
 
-// === Process all images (initial + on mutation) ===
+// === Process images: assign confidence, flag if > 70% ===
 function checkImagesAndRespond() {
     const images = document.querySelectorAll('img');
     let foundAI = false;
@@ -77,24 +71,28 @@ function checkImagesAndRespond() {
     let confidences = [];
 
     images.forEach(img => {
-        if (isLargeAndNotIcon(img)) {
-            scannedCount++;
-            const alreadyFlagged = img.dataset.aiFlagged === 'true';
+        if (!isLargeAndNotIcon(img)) return;
 
-            if (!alreadyFlagged && isAIImage(img.src)) {
-                foundAI = true;
-                const confidence = Math.floor(Math.random() * 40) + 60;
+        scannedCount++;
 
-                flaggedImages.push(img.src);
-                confidences.push(confidence);
+        // Skip already processed images
+        if (img.dataset.aiProcessed === 'true') return;
 
-                img.style.border = '4px solid #e53935';
-                img.style.borderRadius = '6px';
-                img.dataset.aiConfidence = confidence;
-                img.dataset.aiFlagged = 'true';
+        // Assign a random confidence from 0–100%
+        const confidence = Math.floor(Math.random() * 101);
+        img.dataset.aiConfidence = confidence;
+        img.dataset.aiProcessed = 'true';
 
-                attachHoverEvents(img, confidence);
-            }
+        if (confidence > 70) {
+            foundAI = true;
+
+            img.style.border = '4px solid #e53935';
+            img.style.borderRadius = '6px';
+            img.dataset.aiFlagged = 'true';
+
+            attachHoverEvents(img, confidence);
+            flaggedImages.push(img.src);
+            confidences.push(confidence);
         }
     });
 
@@ -113,6 +111,6 @@ const observer = new MutationObserver(() => {
 });
 observer.observe(document.body, { childList: true, subtree: true });
 
-// === Run once on load ===
+// === Initialize on load ===
 createAIPopup();
 checkImagesAndRespond();
