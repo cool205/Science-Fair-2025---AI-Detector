@@ -27,7 +27,7 @@ learning_rate = 0.001
 batch_size = 64
 optimizer_choice = "adam"  # Options: "adam", "sgd"
 dropout_rate = 0.5  # Increased dropout rate
-epochs_per_stage = 7
+epochs_per_stage = 15
 
 # Curriculum configuration (with data augmentation changes)
 curriculum = [
@@ -35,9 +35,8 @@ curriculum = [
         'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\easy',
         'train_transform': transforms.Compose([
             transforms.Resize((32, 32)),
-            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.0),
             transforms.RandomHorizontalFlip(),  # Added horizontal flip for data augmentation
-            transforms.RandomRotation(15),  # Added small rotation to make the data more robust
+            transforms.RandomRotation(10),  # Added small rotation to make the data more robust
             transforms.ToTensor()
         ]),
         'val_transform': transforms.Compose([
@@ -49,9 +48,9 @@ curriculum = [
         'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\medium',
         'train_transform': transforms.Compose([
             transforms.Resize((32, 32)),
-            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
+            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
             transforms.RandomHorizontalFlip(),
-            transforms.RandomRotation(15),  # Increased rotation range for better augmentation
+            transforms.RandomRotation(20),  # Increased rotation range for better augmentation
             transforms.ToTensor()
         ]),
         'val_transform': transforms.Compose([
