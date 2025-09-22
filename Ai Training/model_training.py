@@ -59,19 +59,6 @@ stage3_transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-# Example Dataset Configurations using these transformations:
-# Adjust the dropout rate and batch size based on the stage
-def get_mobilenetv2(num_classes=2, dropout_rate=0.5):  # Default dropout rate
-    model = models.mobilenet_v2(weights=None)
-    # Add dropout after the classifier layer
-    model.classifier[1] = nn.Sequential(
-        nn.Linear(model.last_channel, 1280),
-        nn.Dropout(dropout_rate),
-        nn.ReLU(inplace=True),
-        nn.Linear(1280, num_classes)
-    )
-    return model
-
 # Curriculum Adjustments: Lower batch size and dropout for Stage 2 and Stage 3
 curriculum = [
     {
@@ -81,8 +68,8 @@ curriculum = [
             transforms.Resize((32, 32)),
             transforms.ToTensor()
         ]),
-        'dropout_rate': 0.5,  # Normal dropout rate for stage 1
-        'batch_size': 64  # Larger batch size for stage 1
+        'dropout_rate': 0.3,  # Normal dropout rate for stage 1
+        'batch_size': 32  # Larger batch size for stage 1
     },
     {
         'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\medium',
@@ -101,8 +88,8 @@ curriculum = [
             transforms.Resize((32, 32)),
             transforms.ToTensor()
         ]),
-        'dropout_rate': 0.3,  # Further lower dropout rate for stage 3
-        'batch_size': 32  # Smaller batch size for stage 3
+        'dropout_rate': 0.5,  # Further lower dropout rate for stage 3
+        'batch_size': 64  # Smaller batch size for stage 3
     }
 ]
 
@@ -188,8 +175,9 @@ def main():
         val_size = len(dataset) - train_size  # 20% for validation
         train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
 
-        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+        train_dataloader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)
+        val_dataloader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=False)
+
 
         for epoch in range(epochs_per_stage):  # 7 epochs per stage
             train_accuracy, train_loss = train(model, train_dataloader, criterion, optimizer, device, epoch=epoch, stage=stage)
@@ -216,28 +204,27 @@ def main():
     torch.save(model.state_dict(), "final_model.pth")
     print("Model saved after fine-tuning.")
 
-    # Quantize the model for size reduction
+    # Export the trained (non-quantized) model to ONNX
     dummy_input = torch.randn(1, 3, 32, 32)  # Batch size of 1, 3 channels, 32x32 image size
     model.eval()
-    quantized_model = torch.quantization.quantize_dynamic(
-        model, {nn.Linear}, dtype=torch.qint8
-    )
-    
-    # Fine-tune after quantization
-    optimizer = optim.Adam(quantized_model.parameters(), lr=learning_rate / 10)  # Lower learning rate for fine-tuning
-    for epoch in range(5):  # Fine-tune the quantized model for a few epochs
-        train_accuracy, train_loss = train(quantized_model, train_dataloader, criterion, optimizer, device, epoch=epoch)
-        val_accuracy, val_loss = validate(quantized_model, val_dataloader, criterion, device, epoch=epoch)
 
-    # Export the quantized model to ONNX
     torch.onnx.export(
-        quantized_model,
+        model,
         dummy_input,  # Example input
-        'quantized_model.onnx',
+        'final_model.onnx',
         export_params=True,
         opset_version=12,
-        do_constant_folding=True
+        do_constant_folding=True,
+        input_names=['input'],
+        output_names=['output'],
+        dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}}
     )
+
+    print("Model exported to final_model.onnx.")
+
+if __name__ == "__main__":
+    main()
+
 
 if __name__ == "__main__":
     main()
