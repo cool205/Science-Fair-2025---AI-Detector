@@ -30,17 +30,17 @@ with open(log_file, 'r') as f:
             print("Skipping line due to error:", e)
 
 # Plotting
-if len(epochs) == 15:
+if len(epochs) == 45:
     plt.figure(figsize=(10, 6))
     plt.plot(epochs, train_accuracies, label='Train Accuracy', color='blue', marker='o')
     plt.plot(epochs, val_accuracies, label='Validation Accuracy', color='red', marker='x')
 
     # Highlight stages
-    plt.axvspan(1, 6, color='lightgray', alpha=0.3, label='Stage 1')
-    plt.axvspan(6, 11, color='lightgreen', alpha=0.3, label='Stage 2')
-    plt.axvspan(11, 15, color='lightyellow', alpha=0.3, label='Stage 3')
+    plt.axvspan(1, 16, color='lightgray', alpha=0.3, label='Stage 1')
+    plt.axvspan(16, 31, color='lightgreen', alpha=0.3, label='Stage 2')
+    plt.axvspan(31, 45, color='lightyellow', alpha=0.3, label='Stage 3')
 
-    plt.xticks(range(1, 16))
+    plt.xticks(range(1, 46))
     plt.xlabel('Epoch')
     plt.ylabel('Accuracy (%)')
     plt.title('Train vs Validation Accuracy Across Curriculum Stages')
@@ -49,7 +49,7 @@ if len(epochs) == 15:
     plt.tight_layout()
     plt.show()
 else:
-    print(f"Expected 15 epochs, but found {len(epochs)}. Plotting anyway.")
+    print(f"Expected 45 epochs, but found {len(epochs)}. Plotting anyway.")
     plt.plot(epochs, train_accuracies, label='Train Accuracy', color='blue', marker='o')
     plt.plot(epochs, val_accuracies, label='Validation Accuracy', color='red', marker='x')
     plt.xlabel('Epoch')

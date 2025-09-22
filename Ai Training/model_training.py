@@ -1,3 +1,8 @@
+#run these two
+
+#cd "AI training"
+#  python model_training.py
+
 
 import torch
 from torch.utils.data import DataLoader, random_split
@@ -23,55 +28,84 @@ def get_mobilenetv2(num_classes=2, dropout_rate=0.5):  # Increased dropout rate 
     return model
 
 # Hyperparameter Tuning Variables
-learning_rate = 0.001
+learning_rate = 0.0001
 batch_size = 64
 optimizer_choice = "adam"  # Options: "adam", "sgd"
 dropout_rate = 0.5  # Increased dropout rate
 epochs_per_stage = 15
 
-# Curriculum configuration (with data augmentation changes)
+# Very Light Transformations for Stage 1 (Easy Dataset)
+stage1_transform = transforms.Compose([
+    transforms.Resize((32, 32)),
+    transforms.RandomHorizontalFlip(),  # Horizontal flip
+    transforms.RandomRotation(5),      # Very light rotation
+    transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.05),  # Minimal color jitter
+    transforms.RandomCrop(32, padding=1),  # Small padding for random crop
+    transforms.ToTensor()
+])
+
+# Very Light Transformations for Stage 2 (Medium Dataset)
+stage2_transform = transforms.Compose([
+    transforms.Resize((32, 32)),
+    transforms.RandomHorizontalFlip(),  # Horizontal flip
+    transforms.RandomRotation(10),      # Mild rotation
+    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),  # Mild color jitter
+    transforms.ToTensor()
+])
+
+# Very Light Transformations for Stage 3 (Hard Dataset)
+stage3_transform = transforms.Compose([
+    transforms.Resize((32, 32)),
+    transforms.RandomHorizontalFlip(),  # Horizontal flip
+    transforms.RandomRotation(15),      # Slight rotation
+    transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.2),  # Moderate color jitter
+    transforms.ToTensor()
+])
+
+# Example Dataset Configurations using these transformations:
+# Adjust the dropout rate and batch size based on the stage
+def get_mobilenetv2(num_classes=2, dropout_rate=0.5):  # Default dropout rate
+    model = models.mobilenet_v2(weights=None)
+    # Add dropout after the classifier layer
+    model.classifier[1] = nn.Sequential(
+        nn.Linear(model.last_channel, 1280),
+        nn.Dropout(dropout_rate),
+        nn.ReLU(inplace=True),
+        nn.Linear(1280, num_classes)
+    )
+    return model
+
+# Curriculum Adjustments: Lower batch size and dropout for Stage 2 and Stage 3
 curriculum = [
     {
         'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\easy',
-        'train_transform': transforms.Compose([
+        'train_transform': stage1_transform,
+        'val_transform': transforms.Compose([  # Validation should not have any random transforms
             transforms.Resize((32, 32)),
-            transforms.RandomHorizontalFlip(),  # Added horizontal flip for data augmentation
-            transforms.RandomRotation(10),  # Added small rotation to make the data more robust
             transforms.ToTensor()
         ]),
-        'val_transform': transforms.Compose([
-            transforms.Resize((32, 32)),
-            transforms.ToTensor()
-        ])
+        'dropout_rate': 0.5,  # Normal dropout rate for stage 1
+        'batch_size': 64  # Larger batch size for stage 1
     },
     {
         'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\medium',
-        'train_transform': transforms.Compose([
+        'train_transform': stage2_transform,
+        'val_transform': transforms.Compose([  # Validation should not have any random transforms
             transforms.Resize((32, 32)),
-            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomRotation(20),  # Increased rotation range for better augmentation
             transforms.ToTensor()
         ]),
-        'val_transform': transforms.Compose([
-            transforms.Resize((32, 32)),
-            transforms.ToTensor()
-        ])  
+        'dropout_rate': 0.4,  # Lower dropout rate for stage 2
+        'batch_size': 32  # Smaller batch size for stage 2
     },
     {
         'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\hard',
-        'train_transform': transforms.Compose([
+        'train_transform': stage3_transform,
+        'val_transform': transforms.Compose([  # Validation should not have any random transforms
             transforms.Resize((32, 32)),
-            transforms.RandomRotation(20),  # Moderate rotation range for more generalization
-            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomVerticalFlip(),  # Added vertical flip
             transforms.ToTensor()
         ]),
-        'val_transform': transforms.Compose([
-            transforms.Resize((32, 32)),
-            transforms.ToTensor()
-        ])  
+        'dropout_rate': 0.3,  # Further lower dropout rate for stage 3
+        'batch_size': 32  # Smaller batch size for stage 3
     }
 ]
 
@@ -112,7 +146,7 @@ def validate(model, dataloader, criterion, device, epoch=None, stage=None):
     correct = 0
     total = 0
     with torch.no_grad():
-        for images, labels in tqdm(dataloader, desc=f"Validation Stage {stage+1} Epoch {epoch+1}", leave=False):
+        for images, labels in tqdm(dataloader, desc = f"Validation Stage {stage+1} Epoch {epoch+1}" if stage is not None and epoch is not None else "Validation", leave=False):
             images, labels = images.to(device), labels.to(device)
             outputs = model(images)
             loss = criterion(outputs, labels)
@@ -132,18 +166,6 @@ def log_accuracies(epoch, train_accuracy, val_accuracy, log_file=LOG_FILE):
         f.write(f"Epoch {epoch+1}, Train Accuracy: {train_accuracy*100:.2f}%, Validation Accuracy: {val_accuracy*100:.2f}%\n")
     print(f"Accuracies logged for epoch {epoch+1}.")
 
-# Early stopping
-def early_stopping(val_accuracy, best_val_accuracy, patience, counter):
-    if val_accuracy > best_val_accuracy:
-        best_val_accuracy = val_accuracy
-        counter = 0  # Reset counter when improvement occurs
-    else:
-        counter += 1
-    if counter >= patience:
-        print("Early stopping triggered")
-        return True, best_val_accuracy, counter
-    return False, best_val_accuracy, counter
-
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = get_mobilenetv2(num_classes=2, dropout_rate=dropout_rate).to(device)
@@ -162,10 +184,6 @@ def main():
     with open(LOG_FILE, 'w') as f:
         f.write("Epoch, Train Accuracy, Validation Accuracy\n")
 
-    best_val_accuracy = 0.0
-    patience = 3  # Early stopping patience
-    counter = 0
-
     for stage, config in enumerate(curriculum):
         # Load the dataset and split into train and validation
         dataset = datasets.ImageFolder(config['dataset_path'], transform=config['train_transform'])
@@ -183,16 +201,8 @@ def main():
             # Log accuracies to file
             log_accuracies(epoch, train_accuracy, val_accuracy)
 
-            # Early stopping check
-            stop, best_val_accuracy, counter = early_stopping(val_accuracy, best_val_accuracy, patience, counter)
-            if stop:
-                break
-
             # Step the learning rate scheduler
             scheduler.step()
-
-        # Optional: Save the model after each stage (if needed)
-        torch.save(model.state_dict(), f"model_stage_{stage+1}.pth")
 
     # Fine-tune the model after curriculum learning if needed
     for param in model.parameters():
@@ -205,7 +215,7 @@ def main():
         train_accuracy, train_loss = train(model, train_dataloader, criterion, optimizer, device, epoch=epoch)
         val_accuracy, val_loss = validate(model, val_dataloader, criterion, device, epoch=epoch)
 
-    # Save the final model
+    # Save the final model at the end of all training
     torch.save(model.state_dict(), "final_model.pth")
     print("Model saved after fine-tuning.")
 
@@ -234,4 +244,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
