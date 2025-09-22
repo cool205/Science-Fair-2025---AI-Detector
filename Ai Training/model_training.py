@@ -34,31 +34,28 @@ optimizer_choice = "adam"  # Options: "adam", "sgd"
 dropout_rate = 0.5  # Increased dropout rate
 epochs_per_stage = 15
 
-# Very Light Transformations for Stage 1 (Easy Dataset)
+
 stage1_transform = transforms.Compose([
     transforms.Resize((32, 32)),
-    transforms.RandomHorizontalFlip(),  # Horizontal flip
-    transforms.RandomRotation(5),      # Very light rotation
-    transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.05),  # Minimal color jitter
-    transforms.RandomCrop(32, padding=1),  # Small padding for random crop
+    transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.0),
     transforms.ToTensor()
 ])
 
-# Very Light Transformations for Stage 2 (Medium Dataset)
+
 stage2_transform = transforms.Compose([
     transforms.Resize((32, 32)),
-    transforms.RandomHorizontalFlip(),  # Horizontal flip
-    transforms.RandomRotation(10),      # Mild rotation
-    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),  # Mild color jitter
+    transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1),
+    transforms.RandomHorizontalFlip(),
     transforms.ToTensor()
 ])
 
-# Very Light Transformations for Stage 3 (Hard Dataset)
+
 stage3_transform = transforms.Compose([
     transforms.Resize((32, 32)),
-    transforms.RandomHorizontalFlip(),  # Horizontal flip
-    transforms.RandomRotation(15),      # Slight rotation
-    transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.2),  # Moderate color jitter
+    transforms.RandomRotation(30),
+    transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.2),
+    transforms.RandomHorizontalFlip(),
+    transforms.RandomVerticalFlip(),
     transforms.ToTensor()
 ])
 
@@ -79,7 +76,7 @@ def get_mobilenetv2(num_classes=2, dropout_rate=0.5):  # Default dropout rate
 curriculum = [
     {
         'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\easy',
-        'train_transform': stage1_transform,
+        'train_transform': stage3_transform,
         'val_transform': transforms.Compose([  # Validation should not have any random transforms
             transforms.Resize((32, 32)),
             transforms.ToTensor()
@@ -99,7 +96,7 @@ curriculum = [
     },
     {
         'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\hard',
-        'train_transform': stage3_transform,
+        'train_transform': stage1_transform,
         'val_transform': transforms.Compose([  # Validation should not have any random transforms
             transforms.Resize((32, 32)),
             transforms.ToTensor()
