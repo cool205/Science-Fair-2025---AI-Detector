@@ -1,9 +1,3 @@
-#run these two
-
-#cd "AI training"
-#  python model_training.py
-
-
 import torch
 from torch.utils.data import DataLoader, random_split
 from torchvision import datasets, transforms, models
@@ -11,46 +5,21 @@ from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 import os
-import numpy as np
 
 print("Program Running")
 
-# Use MobileNetV2 as the model architecture with adjustments for overfitting prevention
-def get_mobilenetv2(num_classes=2, dropout_rate=0.5):  # Increased dropout rate for regularization
-    model = models.mobilenet_v2(weights=None)
-    # Add dropout after the classifier layer
-    model.classifier[1] = nn.Sequential(
-        nn.Linear(model.last_channel, 1280),
-        nn.Dropout(dropout_rate),
-        nn.ReLU(inplace=True),
-        nn.Linear(1280, num_classes)
-    )
-    return model
-
-# Hyperparameter Tuning Variables
+# --- Hyperparameters ---
 learning_rate = 0.0001
 batch_size = 64
-optimizer_choice = "adam"  # Options: "adam", "sgd"
-dropout_rate = 0.5  # Increased dropout rate
-epochs_per_stage = 15
+dropout_rate = 0.5
+epochs = 30
+optimizer_choice = "adam"
 
+# --- Dataset Path ---
+dataset_path = r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\easy'
 
-stage1_transform = transforms.Compose([
-    transforms.Resize((32, 32)),
-    transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.0),
-    transforms.ToTensor()
-])
-
-
-stage2_transform = transforms.Compose([
-    transforms.Resize((32, 32)),
-    transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor()
-])
-
-
-stage3_transform = transforms.Compose([
+# --- Transforms ---
+train_transform = transforms.Compose([
     transforms.Resize((32, 32)),
     transforms.RandomRotation(30),
     transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.2),
@@ -59,159 +28,114 @@ stage3_transform = transforms.Compose([
     transforms.ToTensor()
 ])
 
-# Curriculum Adjustments: Lower batch size and dropout for Stage 2 and Stage 3
-curriculum = [
-    {
-        'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\easy',
-        'train_transform': stage3_transform,
-        'val_transform': transforms.Compose([  # Validation should not have any random transforms
-            transforms.Resize((32, 32)),
-            transforms.ToTensor()
-        ]),
-        'dropout_rate': 0.3,  # Normal dropout rate for stage 1
-        'batch_size': 32  # Larger batch size for stage 1
-    },
-    {
-        'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\medium',
-        'train_transform': stage2_transform,
-        'val_transform': transforms.Compose([  # Validation should not have any random transforms
-            transforms.Resize((32, 32)),
-            transforms.ToTensor()
-        ]),
-        'dropout_rate': 0.4,  # Lower dropout rate for stage 2
-        'batch_size': 32  # Smaller batch size for stage 2
-    },
-    {
-        'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\hard',
-        'train_transform': stage1_transform,
-        'val_transform': transforms.Compose([  # Validation should not have any random transforms
-            transforms.Resize((32, 32)),
-            transforms.ToTensor()
-        ]),
-        'dropout_rate': 0.5,  # Further lower dropout rate for stage 3
-        'batch_size': 64  # Smaller batch size for stage 3
-    }
-]
+val_transform = transforms.Compose([
+    transforms.Resize((32, 32)),
+    transforms.ToTensor()
+])
 
-LOG_FILE = "accuracy_log.txt"  # File to save training and validation accuracies
+# --- Model ---
+def get_mobilenetv2(num_classes=2, dropout_rate=0.5):
+    model = models.mobilenet_v2(weights=None)
+    model.classifier[1] = nn.Sequential(
+        nn.Linear(model.last_channel, 1280),
+        nn.Dropout(dropout_rate),
+        nn.ReLU(inplace=True),
+        nn.Linear(1280, num_classes)
+    )
+    return model
 
-def get_model_size(model, model_filename="model.pth"):
-    torch.save(model.state_dict(), model_filename)  # Save model state dict
-    model_size = os.path.getsize(model_filename) / (1024 ** 2)  # MB
-    print(f"Model size: {model_size:.2f} MB")
+# --- Logger ---
+LOG_FILE = "accuracy_log.txt"
 
-def train(model, dataloader, criterion, optimizer, device, epoch=None, stage=None):
+def train(model, dataloader, criterion, optimizer, device, epoch):
     model.train()
     running_loss = 0.0
     correct = 0
     total = 0
-    desc = f"Stage {stage+1} Epoch {epoch+1}" if stage is not None and epoch is not None else "Training"
-    for images, labels in tqdm(dataloader, desc=desc, leave=False):
+    for images, labels in tqdm(dataloader, desc=f"Epoch {epoch+1} Training", leave=False):
         images, labels = images.to(device), labels.to(device)
         optimizer.zero_grad()
         outputs = model(images)
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
-
         running_loss += loss.item()
         _, predicted = outputs.max(1)
         total += labels.size(0)
         correct += (predicted == labels).sum().item()
-
     train_accuracy = correct / total
     avg_loss = running_loss / len(dataloader)
-    print(f"Epoch {epoch+1} Training Loss: {avg_loss:.4f}, Training Accuracy: {train_accuracy*100:.2f}%")
+    print(f"Epoch {epoch+1} Training Loss: {avg_loss:.4f}, Accuracy: {train_accuracy*100:.2f}%")
     return train_accuracy, avg_loss
 
-def validate(model, dataloader, criterion, device, epoch=None, stage=None):
+def validate(model, dataloader, criterion, device, epoch):
     model.eval()
     running_loss = 0.0
     correct = 0
     total = 0
     with torch.no_grad():
-        for images, labels in tqdm(dataloader, desc = f"Validation Stage {stage+1} Epoch {epoch+1}" if stage is not None and epoch is not None else "Validation", leave=False):
+        for images, labels in tqdm(dataloader, desc=f"Epoch {epoch+1} Validation", leave=False):
             images, labels = images.to(device), labels.to(device)
             outputs = model(images)
             loss = criterion(outputs, labels)
-
             running_loss += loss.item()
             _, predicted = outputs.max(1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
-
     val_accuracy = correct / total
     avg_loss = running_loss / len(dataloader)
-    print(f"Epoch {epoch+1} Validation Loss: {avg_loss:.4f}, Validation Accuracy: {val_accuracy*100:.2f}%")
+    print(f"Epoch {epoch+1} Validation Loss: {avg_loss:.4f}, Accuracy: {val_accuracy*100:.2f}%")
     return val_accuracy, avg_loss
 
-def log_accuracies(epoch, train_accuracy, val_accuracy, log_file=LOG_FILE):
-    with open(log_file, 'a') as f:
+def log_accuracies(epoch, train_accuracy, val_accuracy):
+    with open(LOG_FILE, 'a') as f:
         f.write(f"Epoch {epoch+1}, Train Accuracy: {train_accuracy*100:.2f}%, Validation Accuracy: {val_accuracy*100:.2f}%\n")
-    print(f"Accuracies logged for epoch {epoch+1}.")
+    print(f"Logged accuracies for epoch {epoch+1}.")
 
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # Load Dataset
+    full_dataset = datasets.ImageFolder(dataset_path, transform=train_transform)
+    train_size = int(0.8 * len(full_dataset))
+    val_size = len(full_dataset) - train_size
+    train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+
+    # Use separate transform for validation
+    val_dataset.dataset.transform = val_transform
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
     model = get_mobilenetv2(num_classes=2, dropout_rate=dropout_rate).to(device)
     criterion = nn.CrossEntropyLoss()
 
     if optimizer_choice == "adam":
-        optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)  # Added weight decay
-    elif optimizer_choice == "sgd":
-        optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=1e-4)  # Added weight decay
+        optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     else:
-        raise ValueError(f"Unsupported optimizer: {optimizer_choice}")
+        optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=1e-4)
 
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)  # Learning rate scheduler
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
 
-    # Log header to file
     with open(LOG_FILE, 'w') as f:
         f.write("Epoch, Train Accuracy, Validation Accuracy\n")
 
-    for stage, config in enumerate(curriculum):
-        # Load the dataset and split into train and validation
-        dataset = datasets.ImageFolder(config['dataset_path'], transform=config['train_transform'])
-        train_size = int(0.8 * len(dataset))  # 80% for training
-        val_size = len(dataset) - train_size  # 20% for validation
-        train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+    for epoch in range(epochs):
+        train_acc, train_loss = train(model, train_loader, criterion, optimizer, device, epoch)
+        val_acc, val_loss = validate(model, val_loader, criterion, device, epoch)
+        log_accuracies(epoch, train_acc, val_acc)
+        scheduler.step()
 
-        train_dataloader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)
-        val_dataloader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=False)
-
-
-        for epoch in range(epochs_per_stage):  # 7 epochs per stage
-            train_accuracy, train_loss = train(model, train_dataloader, criterion, optimizer, device, epoch=epoch, stage=stage)
-            val_accuracy, val_loss = validate(model, val_dataloader, criterion, device, epoch=epoch, stage=stage)
-
-            # Log accuracies to file
-            log_accuracies(epoch, train_accuracy, val_accuracy)
-
-            # Step the learning rate scheduler
-            scheduler.step()
-
-    # Fine-tune the model after curriculum learning if needed
-    for param in model.parameters():
-        param.requires_grad = False  # Freeze all layers
-    for param in model.classifier.parameters():  # Only train the classifier
-        param.requires_grad = True
-
-    optimizer = optim.Adam(model.classifier.parameters(), lr=learning_rate / 10)  # Lower learning rate for fine-tuning
-    for epoch in range(5):  # Fine-tune for a few more epochs
-        train_accuracy, train_loss = train(model, train_dataloader, criterion, optimizer, device, epoch=epoch)
-        val_accuracy, val_loss = validate(model, val_dataloader, criterion, device, epoch=epoch)
-
-    # Save the final model at the end of all training
     torch.save(model.state_dict(), "final_model.pth")
-    print("Model saved after fine-tuning.")
+    print("Final model saved.")
 
-    # Export the trained (non-quantized) model to ONNX
-    dummy_input = torch.randn(1, 3, 32, 32)  # Batch size of 1, 3 channels, 32x32 image size
+    # Export to ONNX
     model.eval()
-
+    dummy_input = torch.randn(1, 3, 32, 32)
     torch.onnx.export(
         model,
-        dummy_input,  # Example input
-        'final_model.onnx',
+        dummy_input,
+        "final_model.onnx",
         export_params=True,
         opset_version=12,
         do_constant_folding=True,
@@ -219,12 +143,7 @@ def main():
         output_names=['output'],
         dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}}
     )
-
     print("Model exported to final_model.onnx.")
-
-if __name__ == "__main__":
-    main()
-
 
 if __name__ == "__main__":
     main()
