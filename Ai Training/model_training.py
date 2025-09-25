@@ -1,10 +1,13 @@
 import torch
 from torch.utils.data import DataLoader, random_split
-from torchvision import datasets, transforms, models
+from torchvision import transforms, models
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
+from datasets import load_dataset
+from PIL import Image, ImageOps
 import os
+import datasets
 
 print("Program Running")
 
@@ -14,9 +17,6 @@ batch_size = 64
 dropout_rate = 0.5
 epochs = 30
 optimizer_choice = "adam"
-
-# --- Dataset Path ---
-dataset_path = r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\easy'
 
 # --- Transforms ---
 train_transform = transforms.Compose([
@@ -32,6 +32,43 @@ val_transform = transforms.Compose([
     transforms.Resize((32, 32)),
     transforms.ToTensor()
 ])
+
+# --- Safe EXIF transpose to avoid ZeroDivisionError ---
+def safe_exif_transpose(img):
+    try:
+        return ImageOps.exif_transpose(img)
+    except ZeroDivisionError:
+        # Corrupt EXIF data: just return original image
+        return img
+
+# --- Custom Dataset Wrapper ---
+class HuggingFaceImageDataset(torch.utils.data.Dataset):
+    def __init__(self, hf_dataset, transform=None):
+        self.dataset = hf_dataset
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        item = self.dataset[idx]
+        image = item['image']
+
+        # Apply safe exif transpose
+        image = safe_exif_transpose(image)
+
+        # Convert to RGB if not already RGB or RGBA
+        if image.mode not in ['RGB', 'RGBA']:
+            image = image.convert('RGB')
+        elif image.mode == 'RGBA':
+            # If RGBA, convert to RGB by removing alpha channel
+            image = image.convert('RGB')
+
+        label = item['label']
+        if self.transform:
+            image = self.transform(image)
+        return image, label
+
 
 # --- Model ---
 def get_mobilenetv2(num_classes=2, dropout_rate=0.5):
@@ -95,14 +132,20 @@ def log_accuracies(epoch, train_accuracy, val_accuracy):
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    # Load Dataset
-    full_dataset = datasets.ImageFolder(dataset_path, transform=train_transform)
-    train_size = int(0.8 * len(full_dataset))
-    val_size = len(full_dataset) - train_size
-    train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+    # Load dataset from Hugging Face
 
-    # Use separate transform for validation
-    val_dataset.dataset.transform = val_transform
+    ds = load_dataset("Hemg/AI-Generated-vs-Real-Images-Datasets", split="train", keep_in_memory=True)
+    ds = ds.cast_column("image", datasets.features.Image(decode=True, exif_orientation=False))
+    print("Dataset loaded.")
+
+    # Split dataset
+    train_size = int(0.8 * len(ds))
+    val_size = len(ds) - train_size
+    train_dataset_raw, val_dataset_raw = random_split(ds, [train_size, val_size])
+
+    # Wrap datasets in PyTorch Dataset class with transforms
+    train_dataset = HuggingFaceImageDataset(train_dataset_raw, transform=train_transform)
+    val_dataset = HuggingFaceImageDataset(val_dataset_raw, transform=val_transform)
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
@@ -131,7 +174,7 @@ def main():
 
     # Export to ONNX
     model.eval()
-    dummy_input = torch.randn(1, 3, 32, 32)
+    dummy_input = torch.randn(1, 3, 32, 32).to(device)
     torch.onnx.export(
         model,
         dummy_input,
