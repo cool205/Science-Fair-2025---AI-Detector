@@ -1,4 +1,5 @@
 // === Utility: Check if image is large and not an icon ===
+console.log('QuackScan content script loaded');
 function isLargeAndNotIcon(img) {
   const minWidth = 100;
   const minHeight = 100;
@@ -92,82 +93,66 @@ function observeImages() {
   images.forEach(img => observer.observe(img));
 }
 
-// === Safe messaging to background script ===
-function safelySendMessageToBackground(message) {
-  setTimeout(() => {
-    try {
-      chrome.runtime.sendMessage(message, (response) => {
-        if (chrome.runtime.lastError) {
-          console.warn('Message failed:', chrome.runtime.lastError.message);
-        } else {
-          console.log('Message sent successfully:', response);
-        }
-      });
-    } catch (err) {
-      console.error('Extension context invalidated:', err);
-    }
-  }, 500);
-}
-
-// === Messaging and UI update ===
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'analyze-image-result') {
-    const resultDiv = document.getElementById('result');
-    if (!resultDiv) return;
-
-    flaggedImages = message.flaggedImages || [];
-    confidences = message.confidences || [];
-    currentIndex = 0;
-
-    let msg = `Scanned <b>${message.scannedCount}</b> images.<br>`;
-    if (message.isAI) {
-      msg += `<span style="color:#e53935;font-weight:600;">Flagged <b>${flaggedImages.length}</b> image${flaggedImages.length === 1 ? '' : 's'} as AI-generated.</span><br>`;
-      resultDiv.className = 'warning';
-    } else {
-      msg += '<span style="color:#155724;font-weight:600;">No AI-generated images detected.</span>';
-      resultDiv.className = 'safe';
-    }
-    resultDiv.innerHTML = msg;
-    updateSlider();
-  }
-});
-
-// === Slider UI ===
+// === Data storage for this content script ===
 let flaggedImages = [];
 let confidences = [];
 let scannedCount = 0;
 let currentIndex = 0;
 
-function updateSlider() {
-  const sliderContainer = document.getElementById('slider-container');
-  const sliderImg = document.getElementById('slider-img');
-  const confidenceDiv = document.getElementById('confidence');
-  if (flaggedImages.length > 0) {
-    sliderContainer.style.display = 'flex';
-    sliderImg.src = flaggedImages[currentIndex];
-    confidenceDiv.textContent = `Confidence: ${confidences[currentIndex]}%`;
-  } else {
-    sliderContainer.style.display = 'none';
+// === Respond to popup requests ===
+// When the popup sends { type: 'check-images' } we scan visible images and return results.
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'check-images') {
+    // Build results by reading per-image dataset attributes so previously-processed images are included.
+    // Also process any unprocessed images to pick up newly-loaded images.
+    const images = Array.from(document.querySelectorAll('img'));
+    let scanned = 0;
+    const foundFlagged = [];
+    const foundConfidences = [];
+
+    images.forEach(img => {
+      try {
+        if (img.dataset.aiProcessed !== 'true') {
+          // Process new images (this will set dataset flags on the element)
+          processImage(img);
+        }
+        if (img.dataset.aiProcessed === 'true') scanned++;
+        if (img.dataset.aiFlagged === 'true') {
+          foundFlagged.push(img.src);
+          const c = Number(img.dataset.aiConfidence) || 0;
+          foundConfidences.push(c);
+        }
+      } catch (err) {
+        console.warn('Error handling image during check:', err);
+      }
+    });
+
+    const isAI = foundFlagged.length > 0;
+    const response = { scannedCount: scanned, flaggedImages: foundFlagged, confidences: foundConfidences, isAI };
+    console.log('QuackScan content script: received check-images, sending response', response);
+    try {
+      sendResponse(response);
+    } catch (err) {
+      console.error('Error sending response from content script:', err);
+    }
+    return; // no async response
+  }
+});
+
+// === Initialize content script on page ===
+// Initialize content script immediately if the document is already loaded (injection after load case)
+function initContentScript() {
+  try {
+    createAIPopup();
+    observeImages();
+    console.log('QuackScan content script initialized');
+  } catch (err) {
+    console.error('Error initializing content script:', err);
   }
 }
 
-document.getElementById('prevBtn').onclick = () => {
-  if (flaggedImages.length > 0) {
-    currentIndex = (currentIndex - 1 + flaggedImages.length) % flaggedImages.length;
-    updateSlider();
-  }
-};
-
-document.getElementById('nextBtn').onclick = () => {
-  if (flaggedImages.length > 0) {
-    currentIndex = (currentIndex + 1) % flaggedImages.length;
-    updateSlider();
-  }
-};
-
-// === Initialize ===
-window.addEventListener('load', () => {
-  createAIPopup();
-  observeImages();
-  safelySendMessageToBackground({ type: 'check-images' });
-});
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  initContentScript();
+} else {
+  window.addEventListener('load', initContentScript);
+}
