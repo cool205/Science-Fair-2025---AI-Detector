@@ -26,6 +26,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     resultDiv.innerHTML = msg;
     updateSlider();
+    // Tell the content script to apply highlights immediately for the flagged images
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs.length === 0) return;
+      chrome.tabs.sendMessage(tabs[0].id, { type: 'apply-highlights', flaggedImages: flaggedImages, confidences: confidences }, (resp) => {
+        if (chrome.runtime.lastError) {
+          console.warn('apply-highlights failed:', chrome.runtime.lastError.message);
+        } else {
+          console.log('apply-highlights response:', resp);
+        }
+      });
+    });
   }
 
   function updateSlider() {
@@ -94,7 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Check URL first and give a clearer message if it's a restricted page.
         const tabUrl = tabs[0].url || '';
         if (isRestrictedUrl(tabUrl)) {
-          resultDiv.innerHTML = 'Error: This page is restricted for extensions (e.g., chrome://, the Web Store, or local file pages). Try the extension on a normal website like https://example.com.';
+          resultDiv.innerHTML = 'Error: This page is restricted for extensions. Try https:// URLs';
           resultDiv.className = 'warning';
           console.error('Page is restricted for content scripts:', tabUrl);
           return;

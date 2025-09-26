@@ -68,7 +68,8 @@ function processImage(img) {
   img.dataset.aiProcessed = 'true';
 
   if (confidence > 70) {
-    img.style.border = '4px solid #e53935';
+    // Use outline instead of border to avoid layout shifts on the page
+    img.style.outline = '4px solid #e53935';
     img.style.borderRadius = '6px';
     img.dataset.aiFlagged = 'true';
     attachHoverEvents(img, confidence);
@@ -91,6 +92,47 @@ const observer = new IntersectionObserver((entries) => {
 function observeImages() {
   const images = document.querySelectorAll('img');
   images.forEach(img => observer.observe(img));
+}
+
+// Watch for images added dynamically (lazy-loaded or inserted later) and observe/process them.
+function watchForNewImages() {
+  const mo = new MutationObserver(mutations => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (!(node instanceof Element)) continue;
+        // If an img node was added directly
+        if (node.tagName && node.tagName.toLowerCase() === 'img') {
+          const img = node;
+          observer.observe(img);
+          if (img.complete) {
+            // already loaded
+            try { processImage(img); } catch (e) { console.warn('processImage error on added img:', e); }
+          } else {
+            img.addEventListener('load', function onLoad() {
+              img.removeEventListener('load', onLoad);
+              try { processImage(img); } catch (e) { console.warn('processImage error on added img load:', e); }
+            });
+          }
+        } else {
+          // If a subtree containing images was added, find them
+          const imgs = node.querySelectorAll ? node.querySelectorAll('img') : [];
+          imgs.forEach(img => {
+            observer.observe(img);
+            if (img.complete) {
+              try { processImage(img); } catch (e) { console.warn('processImage error on added subtree img:', e); }
+            } else {
+              img.addEventListener('load', function onLoad() {
+                img.removeEventListener('load', onLoad);
+                try { processImage(img); } catch (e) { console.warn('processImage error on added subtree img load:', e); }
+              });
+            }
+          });
+        }
+      }
+    }
+  });
+
+  mo.observe(document.documentElement || document.body, { childList: true, subtree: true });
 }
 
 // === Data storage for this content script ===
@@ -137,6 +179,54 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     return; // no async response
   }
+  
+  // Explicit highlight request (popup -> content): apply highlights for given image URLs
+  if (message.type === 'apply-highlights') {
+    try {
+      const urls = message.flaggedImages || [];
+      const confs = message.confidences || [];
+      urls.forEach((url, i) => {
+        // Normalize the target URL and try several matching strategies
+        let target = url;
+        try { target = decodeURI(url); } catch (e) {}
+        function normalize(u) {
+          try { const a = document.createElement('a'); a.href = u; return a.href; } catch (e) { return u; }
+        }
+        const normTarget = normalize(target);
+
+        const imgs = Array.from(document.querySelectorAll('img[src]')).filter(img => {
+          const src = img.src || '';
+          const normSrc = normalize(src);
+          if (normSrc === normTarget) return true;
+          if (src === url || src === target) return true;
+          // fallback: compare filenames
+          try {
+            const srcName = normSrc.split('/').pop();
+            const tgtName = normTarget.split('/').pop();
+            if (srcName && tgtName && srcName === tgtName) return true;
+          } catch (e) {}
+          return false;
+        });
+        imgs.forEach(img => {
+          try {
+            img.style.outline = '4px solid #e53935';
+            img.style.borderRadius = '6px';
+            img.dataset.aiFlagged = 'true';
+            img.dataset.aiConfidence = String(confs[i] || img.dataset.aiConfidence || 0);
+            attachHoverEvents(img, Number(img.dataset.aiConfidence) || 0);
+          } catch (e) {
+            console.warn('Error applying highlight to image:', e);
+          }
+        });
+      });
+      // Acknowledge
+      sendResponse({ applied: true });
+    } catch (err) {
+      console.error('Error in apply-highlights handler:', err);
+      try { sendResponse({ applied: false, error: String(err) }); } catch (e) {}
+    }
+    return;
+  }
 });
 
 // === Initialize content script on page ===
@@ -145,6 +235,7 @@ function initContentScript() {
   try {
     createAIPopup();
     observeImages();
+    watchForNewImages();
     console.log('QuackScan content script initialized');
   } catch (err) {
     console.error('Error initializing content script:', err);
