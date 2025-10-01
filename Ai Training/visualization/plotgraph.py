@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-log_file = 'accuracy_log.txt'
+log_file = r'AI Training/accuracy_log.txt'
 
 epochs, train_accuracies, val_accuracies = [], [], []
 

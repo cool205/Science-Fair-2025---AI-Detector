@@ -1,6 +1,7 @@
 import torch
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms, models
+from sklearn.model_selection import StratifiedShuffleSplit
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
@@ -9,7 +10,7 @@ import os
 print("Program Running")
 
 # Model setup
-def get_mobilenetv2(num_classes=2, dropout_rate=0.5):
+def get_mobilenetv2(num_classes=2, dropout_rate=0.6):
     model = models.mobilenet_v2(weights=None)
     model.classifier[1] = nn.Sequential(
         nn.Linear(model.last_channel, 1280),
@@ -22,22 +23,29 @@ def get_mobilenetv2(num_classes=2, dropout_rate=0.5):
 # Hyperparameters
 learning_rate = 0.0001
 batch_size = 64
-dropout_rate = 0.5
-epochs = 15
+dropout_rate = 0.6
+epochs = 20
 LOG_FILE = "accuracy_log.txt"
 DATASET_PATH = r'data/train'
 
 # Transforms
+normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
+
 train_transform = transforms.Compose([
     transforms.Resize((32, 32)),
+    transforms.RandomResizedCrop(32, scale=(0.8, 1.0)),
     transforms.RandomHorizontalFlip(),
+    transforms.RandomRotation(15),
     transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
-    transforms.ToTensor()
+    transforms.ToTensor(),
+    normalize
 ])
 
 val_transform = transforms.Compose([
     transforms.Resize((32, 32)),
-    transforms.ToTensor()
+    transforms.ToTensor(),
+    normalize
 ])
 
 # Training loop
@@ -98,14 +106,18 @@ def main():
     print("Using device:", device)
     model = get_mobilenetv2(num_classes=2, dropout_rate=dropout_rate).to(device)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-3)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
 
-    # Load and split dataset
+    # Load dataset
     full_dataset = datasets.ImageFolder(DATASET_PATH, transform=train_transform)
-    train_size = int(0.8 * len(full_dataset))
-    val_size = len(full_dataset) - train_size
-    train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+    targets = [label for _, label in full_dataset.imgs]
+
+    # Stratified split
+    splitter = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+    train_idx, val_idx = next(splitter.split(full_dataset.imgs, targets))
+    train_dataset = Subset(full_dataset, train_idx)
+    val_dataset = Subset(full_dataset, val_idx)
     val_dataset.dataset.transform = val_transform
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -115,10 +127,10 @@ def main():
         f.write("Epoch, Train Accuracy, Validation Accuracy\n")
 
     for epoch in range(epochs):
-        train_acc, _ = train(model, train_loader, criterion, optimizer, device, epoch)
-        val_acc, _ = validate(model, val_loader, criterion, device, epoch)
+        train_acc, train_loss = train(model, train_loader, criterion, optimizer, device, epoch)
+        val_acc, val_loss = validate(model, val_loader, criterion, device, epoch)
         log_accuracies(epoch, train_acc, val_acc)
-        scheduler.step()
+        scheduler.step(val_loss)
 
     # Fine-tune classifier
     for param in model.parameters():
