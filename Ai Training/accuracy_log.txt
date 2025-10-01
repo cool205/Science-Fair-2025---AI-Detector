@@ -1,1 +1,0 @@
-dropout,batch_size,learning_rate,color_jitter,epoch,train_acc,val_acc

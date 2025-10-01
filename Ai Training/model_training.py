@@ -27,7 +27,6 @@ batch_size = 64
 dropout_rate = 0.6
 epochs = 10
 LOG_FILE = "accuracy_log.txt"
-LOG_FILE_2 = "accuracy_log2.txt"
 DATASET_PATH = r'data/train'
 
 # Transforms
@@ -118,10 +117,8 @@ def main():
     base_dataset = datasets.ImageFolder(DATASET_PATH)
     targets = [label for _, label in base_dataset.imgs]
 
-    # Prepare log files and write headers
+    # Prepare single log file and write header
     with open(LOG_FILE, 'w') as f:
-        f.write('dropout,batch_size,learning_rate,color_jitter,epoch,train_acc,val_acc\n')
-    with open(LOG_FILE_2, 'w') as f:
         f.write('dropout,batch_size,learning_rate,color_jitter,epoch,train_acc,val_acc\n')
 
     total_runs = len(dropout_rates) * len(batch_sizes) * len(learning_rates) * len(color_jitters)
@@ -132,7 +129,12 @@ def main():
             for lr in learning_rates:
                 for cj in color_jitters:
                     run_idx += 1
-                    print(f"Starting run {run_idx}/{total_runs}: dropout={d}, batch={b}, lr={lr}, color_jitter={cj}")
+                    # Print two blank lines, hyperparameters, then two blank lines (for readability)
+                    header = f"\n\nRUN {run_idx}/{total_runs} PARAMETERS: dropout={d}, batch_size={b}, learning_rate={lr}, color_jitter={cj}\n\n"
+                    print(header)
+                    # Also write the same header into the log file
+                    with open(LOG_FILE, 'a') as f:
+                        f.write(header.replace('\n', '\n'))
 
                     # Build transforms and datasets for this run
                     train_transform = make_train_transform(color_jitter_strength=cj)
@@ -157,21 +159,17 @@ def main():
                         train_acc, train_loss = train(model, train_loader, criterion, optimizer, device, epoch)
                         val_acc, val_loss = validate(model, val_loader, criterion, device, epoch)
 
-                        # choose which log file to write to (split runs roughly in half)
+                        # write to single log file
                         log_line = f"{d},{b},{lr},{cj},{epoch+1},{train_acc:.4f},{val_acc:.4f}\n"
-                        if run_idx <= total_runs // 2:
-                            with open(LOG_FILE, 'a') as f:
-                                f.write(log_line)
-                        else:
-                            with open(LOG_FILE_2, 'a') as f:
-                                f.write(log_line)
+                        with open(LOG_FILE, 'a') as f:
+                            f.write(log_line)
 
                         scheduler.step(val_loss)
 
                     # Note: do not save models per request
                     print(f"Completed run {run_idx}/{total_runs}")
 
-    print("All runs completed. Logs written to", LOG_FILE, "and", LOG_FILE_2)
+    print("All runs completed. Log written to", LOG_FILE)
 
 if __name__ == "__main__":
     main()
