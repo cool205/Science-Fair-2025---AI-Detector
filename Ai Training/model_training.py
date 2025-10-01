@@ -21,26 +21,30 @@ def get_mobilenetv2(num_classes=2, dropout_rate=0.6):
     return model
 
 # Hyperparameters
+# Defaults (will be overridden by grid search)
 learning_rate = 0.0001
 batch_size = 64
 dropout_rate = 0.6
-epochs = 20
+epochs = 10
 LOG_FILE = "accuracy_log.txt"
+LOG_FILE_2 = "accuracy_log2.txt"
 DATASET_PATH = r'data/train'
 
 # Transforms
 normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225])
 
-train_transform = transforms.Compose([
-    transforms.Resize((32, 32)),
-    transforms.RandomResizedCrop(32, scale=(0.8, 1.0)),
-    transforms.RandomHorizontalFlip(),
-    transforms.RandomRotation(15),
-    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
-    transforms.ToTensor(),
-    normalize
-])
+def make_train_transform(color_jitter_strength=0.2):
+    # color_jitter_strength controls brightness/contrast/saturation and hue small value
+    return transforms.Compose([
+        transforms.Resize((32, 32)),
+        transforms.RandomResizedCrop(32, scale=(0.8, 1.0)),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomRotation(15),
+        transforms.ColorJitter(brightness=color_jitter_strength, contrast=color_jitter_strength, saturation=color_jitter_strength, hue=0.1),
+        transforms.ToTensor(),
+        normalize
+    ])
 
 val_transform = transforms.Compose([
     transforms.Resize((32, 32)),
@@ -104,47 +108,70 @@ def log_accuracies(epoch, train_acc, val_acc):
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print("Using device:", device)
-    model = get_mobilenetv2(num_classes=2, dropout_rate=dropout_rate).to(device)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-3)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
+    # Grid search settings
+    dropout_rates = [0.5, 0.6, 0.7, 0.8]
+    batch_sizes = [32, 64]
+    learning_rates = [1e-3, 1e-4, 1e-5]
+    color_jitters = [0.1, 0.2, 0.3]
 
-    # Load dataset
-    full_dataset = datasets.ImageFolder(DATASET_PATH, transform=train_transform)
-    targets = [label for _, label in full_dataset.imgs]
+    # Prepare dataset once (we will recreate dataset objects with different transforms per run)
+    base_dataset = datasets.ImageFolder(DATASET_PATH)
+    targets = [label for _, label in base_dataset.imgs]
 
-    # Stratified split
-    splitter = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
-    train_idx, val_idx = next(splitter.split(full_dataset.imgs, targets))
-    train_dataset = Subset(full_dataset, train_idx)
-    val_dataset = Subset(full_dataset, val_idx)
-    val_dataset.dataset.transform = val_transform
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-
+    # Prepare log files and write headers
     with open(LOG_FILE, 'w') as f:
-        f.write("Epoch, Train Accuracy, Validation Accuracy\n")
+        f.write('dropout,batch_size,learning_rate,color_jitter,epoch,train_acc,val_acc\n')
+    with open(LOG_FILE_2, 'w') as f:
+        f.write('dropout,batch_size,learning_rate,color_jitter,epoch,train_acc,val_acc\n')
 
-    for epoch in range(epochs):
-        train_acc, train_loss = train(model, train_loader, criterion, optimizer, device, epoch)
-        val_acc, val_loss = validate(model, val_loader, criterion, device, epoch)
-        log_accuracies(epoch, train_acc, val_acc)
-        scheduler.step(val_loss)
+    total_runs = len(dropout_rates) * len(batch_sizes) * len(learning_rates) * len(color_jitters)
+    run_idx = 0
 
-    # Fine-tune classifier
-    for param in model.parameters():
-        param.requires_grad = False
-    for param in model.classifier.parameters():
-        param.requires_grad = True
+    for d in dropout_rates:
+        for b in batch_sizes:
+            for lr in learning_rates:
+                for cj in color_jitters:
+                    run_idx += 1
+                    print(f"Starting run {run_idx}/{total_runs}: dropout={d}, batch={b}, lr={lr}, color_jitter={cj}")
 
-    optimizer = optim.Adam(model.classifier.parameters(), lr=learning_rate / 10)
-    for epoch in range(5):
-        train_acc, _ = train(model, train_loader, criterion, optimizer, device, epoch)
-        val_acc, _ = validate(model, val_loader, criterion, device, epoch)
+                    # Build transforms and datasets for this run
+                    train_transform = make_train_transform(color_jitter_strength=cj)
+                    full_dataset = datasets.ImageFolder(DATASET_PATH, transform=train_transform)
+                    splitter = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+                    train_idx, val_idx = next(splitter.split(full_dataset.imgs, targets))
+                    train_dataset = Subset(full_dataset, train_idx)
+                    val_dataset = Subset(full_dataset, val_idx)
+                    val_dataset.dataset.transform = val_transform
 
-    torch.save(model.state_dict(), "final_model.pth")
-    print("Model saved to final_model.pth")
+                    train_loader = DataLoader(train_dataset, batch_size=b, shuffle=True)
+                    val_loader = DataLoader(val_dataset, batch_size=b, shuffle=False)
+
+                    # Model, criterion, optimizer
+                    model = get_mobilenetv2(num_classes=2, dropout_rate=d).to(device)
+                    criterion = nn.CrossEntropyLoss()
+                    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-3)
+                    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
+
+                    # Train for configured epochs
+                    for epoch in range(epochs):
+                        train_acc, train_loss = train(model, train_loader, criterion, optimizer, device, epoch)
+                        val_acc, val_loss = validate(model, val_loader, criterion, device, epoch)
+
+                        # choose which log file to write to (split runs roughly in half)
+                        log_line = f"{d},{b},{lr},{cj},{epoch+1},{train_acc:.4f},{val_acc:.4f}\n"
+                        if run_idx <= total_runs // 2:
+                            with open(LOG_FILE, 'a') as f:
+                                f.write(log_line)
+                        else:
+                            with open(LOG_FILE_2, 'a') as f:
+                                f.write(log_line)
+
+                        scheduler.step(val_loss)
+
+                    # Note: do not save models per request
+                    print(f"Completed run {run_idx}/{total_runs}")
+
+    print("All runs completed. Logs written to", LOG_FILE, "and", LOG_FILE_2)
 
 if __name__ == "__main__":
     main()
