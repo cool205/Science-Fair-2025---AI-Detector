@@ -1,24 +1,17 @@
-#run these two
-
-#cd "AI training"
-#  python model_training.py
-
-
 import torch
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms, models
+from sklearn.model_selection import StratifiedShuffleSplit
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 import os
-import numpy as np
 
 print("Program Running")
 
-# Use MobileNetV2 as the model architecture with adjustments for overfitting prevention
-def get_mobilenetv2(num_classes=2, dropout_rate=0.5):  # Increased dropout rate for regularization
+# Model setup
+def get_mobilenetv2(num_classes=2, dropout_rate=0.6):
     model = models.mobilenet_v2(weights=None)
-    # Add dropout after the classifier layer
     model.classifier[1] = nn.Sequential(
         nn.Linear(model.last_channel, 1280),
         nn.Dropout(dropout_rate),
@@ -27,86 +20,44 @@ def get_mobilenetv2(num_classes=2, dropout_rate=0.5):  # Increased dropout rate 
     )
     return model
 
-# Hyperparameter Tuning Variables
+# Hyperparameters
+# Defaults (will be overridden by grid search)
 learning_rate = 0.0001
 batch_size = 64
-optimizer_choice = "adam"  # Options: "adam", "sgd"
-dropout_rate = 0.5  # Increased dropout rate
-epochs_per_stage = 15
+dropout_rate = 0.6
+epochs = 10
+LOG_FILE = "accuracy_log.txt"
+DATASET_PATH = r'data/train'
 
+# Transforms
+normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
 
-stage1_transform = transforms.Compose([
+def make_train_transform(color_jitter_strength=0.2):
+    # color_jitter_strength controls brightness/contrast/saturation and hue small value
+    return transforms.Compose([
+        transforms.Resize((32, 32)),
+        transforms.RandomResizedCrop(32, scale=(0.8, 1.0)),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomRotation(15),
+        transforms.ColorJitter(brightness=color_jitter_strength, contrast=color_jitter_strength, saturation=color_jitter_strength, hue=0.1),
+        transforms.ToTensor(),
+        normalize
+    ])
+
+val_transform = transforms.Compose([
     transforms.Resize((32, 32)),
-    transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.0),
-    transforms.ToTensor()
+    transforms.ToTensor(),
+    normalize
 ])
 
-
-stage2_transform = transforms.Compose([
-    transforms.Resize((32, 32)),
-    transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor()
-])
-
-
-stage3_transform = transforms.Compose([
-    transforms.Resize((32, 32)),
-    transforms.RandomRotation(30),
-    transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.2),
-    transforms.RandomHorizontalFlip(),
-    transforms.RandomVerticalFlip(),
-    transforms.ToTensor()
-])
-
-# Curriculum Adjustments: Lower batch size and dropout for Stage 2 and Stage 3
-curriculum = [
-    {
-        'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\easy',
-        'train_transform': stage3_transform,
-        'val_transform': transforms.Compose([  # Validation should not have any random transforms
-            transforms.Resize((32, 32)),
-            transforms.ToTensor()
-        ]),
-        'dropout_rate': 0.3,  # Normal dropout rate for stage 1
-        'batch_size': 32  # Larger batch size for stage 1
-    },
-    {
-        'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\medium',
-        'train_transform': stage2_transform,
-        'val_transform': transforms.Compose([  # Validation should not have any random transforms
-            transforms.Resize((32, 32)),
-            transforms.ToTensor()
-        ]),
-        'dropout_rate': 0.4,  # Lower dropout rate for stage 2
-        'batch_size': 32  # Smaller batch size for stage 2
-    },
-    {
-        'dataset_path': r'C:\Users\Hannah\OneDrive\Desktop\Science-Fair-2025---AI-Detector\AI Training\data\hard',
-        'train_transform': stage1_transform,
-        'val_transform': transforms.Compose([  # Validation should not have any random transforms
-            transforms.Resize((32, 32)),
-            transforms.ToTensor()
-        ]),
-        'dropout_rate': 0.5,  # Further lower dropout rate for stage 3
-        'batch_size': 64  # Smaller batch size for stage 3
-    }
-]
-
-LOG_FILE = "accuracy_log.txt"  # File to save training and validation accuracies
-
-def get_model_size(model, model_filename="model.pth"):
-    torch.save(model.state_dict(), model_filename)  # Save model state dict
-    model_size = os.path.getsize(model_filename) / (1024 ** 2)  # MB
-    print(f"Model size: {model_size:.2f} MB")
-
-def train(model, dataloader, criterion, optimizer, device, epoch=None, stage=None):
+# Training loop
+def train(model, dataloader, criterion, optimizer, device, epoch):
     model.train()
     running_loss = 0.0
     correct = 0
     total = 0
-    desc = f"Stage {stage+1} Epoch {epoch+1}" if stage is not None and epoch is not None else "Training"
-    for images, labels in tqdm(dataloader, desc=desc, leave=False):
+    for images, labels in tqdm(dataloader, desc=f"Epoch {epoch+1} Training", leave=False):
         images, labels = images.to(device), labels.to(device)
         optimizer.zero_grad()
         outputs = model(images)
@@ -119,18 +70,19 @@ def train(model, dataloader, criterion, optimizer, device, epoch=None, stage=Non
         total += labels.size(0)
         correct += (predicted == labels).sum().item()
 
-    train_accuracy = correct / total
+    accuracy = correct / total
     avg_loss = running_loss / len(dataloader)
-    print(f"Epoch {epoch+1} Training Loss: {avg_loss:.4f}, Training Accuracy: {train_accuracy*100:.2f}%")
-    return train_accuracy, avg_loss
+    print(f"Epoch {epoch+1} Training Loss: {avg_loss:.4f}, Accuracy: {accuracy*100:.2f}%")
+    return accuracy, avg_loss
 
-def validate(model, dataloader, criterion, device, epoch=None, stage=None):
+# Validation loop
+def validate(model, dataloader, criterion, device, epoch):
     model.eval()
     running_loss = 0.0
     correct = 0
     total = 0
     with torch.no_grad():
-        for images, labels in tqdm(dataloader, desc = f"Validation Stage {stage+1} Epoch {epoch+1}" if stage is not None and epoch is not None else "Validation", leave=False):
+        for images, labels in tqdm(dataloader, desc=f"Epoch {epoch+1} Validation", leave=False):
             images, labels = images.to(device), labels.to(device)
             outputs = model(images)
             loss = criterion(outputs, labels)
@@ -140,91 +92,84 @@ def validate(model, dataloader, criterion, device, epoch=None, stage=None):
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
 
-    val_accuracy = correct / total
+    accuracy = correct / total
     avg_loss = running_loss / len(dataloader)
-    print(f"Epoch {epoch+1} Validation Loss: {avg_loss:.4f}, Validation Accuracy: {val_accuracy*100:.2f}%")
-    return val_accuracy, avg_loss
+    print(f"Epoch {epoch+1} Validation Loss: {avg_loss:.4f}, Accuracy: {accuracy*100:.2f}%")
+    return accuracy, avg_loss
 
-def log_accuracies(epoch, train_accuracy, val_accuracy, log_file=LOG_FILE):
-    with open(log_file, 'a') as f:
-        f.write(f"Epoch {epoch+1}, Train Accuracy: {train_accuracy*100:.2f}%, Validation Accuracy: {val_accuracy*100:.2f}%\n")
-    print(f"Accuracies logged for epoch {epoch+1}.")
+# Logging
+def log_accuracies(epoch, train_acc, val_acc):
+    with open(LOG_FILE, 'a') as f:
+        f.write(f"Epoch {epoch+1}, Train Accuracy: {train_acc*100:.2f}%, Validation Accuracy: {val_acc*100:.2f}%\n")
+    print(f"Logged accuracies for epoch {epoch+1}")
 
+# Main training pipeline
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = get_mobilenetv2(num_classes=2, dropout_rate=dropout_rate).to(device)
-    criterion = nn.CrossEntropyLoss()
+    print("Using device:", device)
+    # Grid search settings
+    dropout_rates = [0.5, 0.6, 0.7, 0.8]
+    batch_sizes = [32, 64]
+    learning_rates = [1e-3, 1e-4, 1e-5]
+    color_jitters = [0.1, 0.2, 0.3]
 
-    if optimizer_choice == "adam":
-        optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)  # Added weight decay
-    elif optimizer_choice == "sgd":
-        optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=1e-4)  # Added weight decay
-    else:
-        raise ValueError(f"Unsupported optimizer: {optimizer_choice}")
+    # Prepare dataset once (we will recreate dataset objects with different transforms per run)
+    base_dataset = datasets.ImageFolder(DATASET_PATH)
+    targets = [label for _, label in base_dataset.imgs]
 
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)  # Learning rate scheduler
-
-    # Log header to file
+    # Prepare single log file and write header
     with open(LOG_FILE, 'w') as f:
-        f.write("Epoch, Train Accuracy, Validation Accuracy\n")
+        f.write('dropout,batch_size,learning_rate,color_jitter,epoch,train_acc,val_acc\n')
 
-    for stage, config in enumerate(curriculum):
-        # Load the dataset and split into train and validation
-        dataset = datasets.ImageFolder(config['dataset_path'], transform=config['train_transform'])
-        train_size = int(0.8 * len(dataset))  # 80% for training
-        val_size = len(dataset) - train_size  # 20% for validation
-        train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+    total_runs = len(dropout_rates) * len(batch_sizes) * len(learning_rates) * len(color_jitters)
+    run_idx = 0
 
-        train_dataloader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)
-        val_dataloader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=False)
+    for d in dropout_rates:
+        for b in batch_sizes:
+            for lr in learning_rates:
+                for cj in color_jitters:
+                    run_idx += 1
+                    # Print two blank lines, hyperparameters, then two blank lines (for readability)
+                    header = f"\n\nRUN {run_idx}/{total_runs} PARAMETERS: dropout={d}, batch_size={b}, learning_rate={lr}, color_jitter={cj}\n\n"
+                    print(header)
+                    # Also write the same header into the log file
+                    with open(LOG_FILE, 'a') as f:
+                        f.write(header.replace('\n', '\n'))
 
+                    # Build transforms and datasets for this run
+                    train_transform = make_train_transform(color_jitter_strength=cj)
+                    full_dataset = datasets.ImageFolder(DATASET_PATH, transform=train_transform)
+                    splitter = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+                    train_idx, val_idx = next(splitter.split(full_dataset.imgs, targets))
+                    train_dataset = Subset(full_dataset, train_idx)
+                    val_dataset = Subset(full_dataset, val_idx)
+                    val_dataset.dataset.transform = val_transform
 
-        for epoch in range(epochs_per_stage):  # 7 epochs per stage
-            train_accuracy, train_loss = train(model, train_dataloader, criterion, optimizer, device, epoch=epoch, stage=stage)
-            val_accuracy, val_loss = validate(model, val_dataloader, criterion, device, epoch=epoch, stage=stage)
+                    train_loader = DataLoader(train_dataset, batch_size=b, shuffle=True)
+                    val_loader = DataLoader(val_dataset, batch_size=b, shuffle=False)
 
-            # Log accuracies to file
-            log_accuracies(epoch, train_accuracy, val_accuracy)
+                    # Model, criterion, optimizer
+                    model = get_mobilenetv2(num_classes=2, dropout_rate=d).to(device)
+                    criterion = nn.CrossEntropyLoss()
+                    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-3)
+                    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
 
-            # Step the learning rate scheduler
-            scheduler.step()
+                    # Train for configured epochs
+                    for epoch in range(epochs):
+                        train_acc, train_loss = train(model, train_loader, criterion, optimizer, device, epoch)
+                        val_acc, val_loss = validate(model, val_loader, criterion, device, epoch)
 
-    # Fine-tune the model after curriculum learning if needed
-    for param in model.parameters():
-        param.requires_grad = False  # Freeze all layers
-    for param in model.classifier.parameters():  # Only train the classifier
-        param.requires_grad = True
+                        # write to single log file
+                        log_line = f"{d},{b},{lr},{cj},{epoch+1},{train_acc:.4f},{val_acc:.4f}\n"
+                        with open(LOG_FILE, 'a') as f:
+                            f.write(log_line)
 
-    optimizer = optim.Adam(model.classifier.parameters(), lr=learning_rate / 10)  # Lower learning rate for fine-tuning
-    for epoch in range(5):  # Fine-tune for a few more epochs
-        train_accuracy, train_loss = train(model, train_dataloader, criterion, optimizer, device, epoch=epoch)
-        val_accuracy, val_loss = validate(model, val_dataloader, criterion, device, epoch=epoch)
+                        scheduler.step(val_loss)
 
-    # Save the final model at the end of all training
-    torch.save(model.state_dict(), "final_model.pth")
-    print("Model saved after fine-tuning.")
+                    # Note: do not save models per request
+                    print(f"Completed run {run_idx}/{total_runs}")
 
-    # Export the trained (non-quantized) model to ONNX
-    dummy_input = torch.randn(1, 3, 32, 32)  # Batch size of 1, 3 channels, 32x32 image size
-    model.eval()
-
-    torch.onnx.export(
-        model,
-        dummy_input,  # Example input
-        'final_model.onnx',
-        export_params=True,
-        opset_version=12,
-        do_constant_folding=True,
-        input_names=['input'],
-        output_names=['output'],
-        dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}}
-    )
-
-    print("Model exported to final_model.onnx.")
-
-if __name__ == "__main__":
-    main()
-
+    print("All runs completed. Log written to", LOG_FILE)
 
 if __name__ == "__main__":
     main()
