@@ -18,8 +18,8 @@ Epoch 14, Train Accuracy: 90.07%, Validation Accuracy: 87.50%
 Epoch 15, Train Accuracy: 90.18%, Validation Accuracy: 87.59%
  
 
- second run
- 
+second run
+
 Epoch, Train Accuracy, Validation Accuracy
 Epoch 1, Train Accuracy: 64.81%, Validation Accuracy: 72.25%
 Epoch 2, Train Accuracy: 75.41%, Validation Accuracy: 78.10%
@@ -41,3 +41,4 @@ Epoch 17, Train Accuracy: 96.64%, Validation Accuracy: 89.78%
 Epoch 18, Train Accuracy: 96.95%, Validation Accuracy: 89.65%
 Epoch 19, Train Accuracy: 97.17%, Validation Accuracy: 89.61%
 Epoch 20, Train Accuracy: 98.07%, Validation Accuracy: 89.65%
+
