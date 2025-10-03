@@ -54,7 +54,7 @@ function hideAIPopup() {
 function createHeatmapOverlay(img, confidence) {
   const overlay = document.createElement('div');
   overlay.className = 'ai-heatmap-overlay';
-  const intensity = Math.min(confidence, 100) / 100;
+  const intensity = Math.max(0, Math.min((confidence - 70) / 100, 0.3)) * 1.5;
 
   Object.assign(overlay.style, {
     position: 'absolute',
@@ -62,7 +62,7 @@ function createHeatmapOverlay(img, confidence) {
     left: `${img.offsetLeft}px`,
     width: `${img.offsetWidth}px`,
     height: `${img.offsetHeight}px`,
-    background: `radial-gradient(circle at center, rgba(229,57,53,${intensity}) 0%, transparent 70%)`,
+    backgroundColor: `rgba(229, 57, 53, ${intensity})`,
     pointerEvents: 'none',
     zIndex: '9998',
     borderRadius: '6px',
@@ -89,8 +89,12 @@ function processImage(img) {
   if (!isLargeAndNotIcon(img)) return;
   if (img.dataset.aiProcessed === 'true') return;
 
-  const confidence = Math.floor(Math.random() * 101);
-  img.dataset.aiConfidence = confidence;
+  let confidence = Number(img.dataset.aiConfidence);
+  if (!confidence) {
+    confidence = Math.floor(Math.random() * 101);
+    img.dataset.aiConfidence = confidence;
+  }
+
   img.dataset.aiProcessed = 'true';
 
   if (confidence > 70) {
@@ -103,6 +107,7 @@ function processImage(img) {
 
   scannedCount++;
 }
+
 
 // === Observe images entering the viewport ===
 const observer = new IntersectionObserver((entries) => {
