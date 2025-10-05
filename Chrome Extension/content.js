@@ -1,5 +1,6 @@
-// === Utility: Check if image is large and not an icon ===
 console.log('QuackScan content script loaded');
+
+// === Utility: Check if image is large and not an icon ===
 function isLargeAndNotIcon(img) {
   const minWidth = 100;
   const minHeight = 100;
@@ -36,7 +37,6 @@ function createAIPopup() {
   document.body.appendChild(popup);
 }
 
-// === Show/hide popup on hover ===
 function showAIPopup(confidence) {
   const popup = document.getElementById('ai-confidence-popup');
   if (popup && confidence > 70) {
@@ -48,6 +48,32 @@ function showAIPopup(confidence) {
 function hideAIPopup() {
   const popup = document.getElementById('ai-confidence-popup');
   if (popup) popup.style.opacity = '0';
+}
+
+// === Create saliency-style heatmap overlay ===
+function createHeatmapOverlay(img, confidence) {
+  const overlay = document.createElement('div');
+  overlay.className = 'ai-heatmap-overlay';
+  const intensity = Math.max(0, Math.min((confidence - 70) / 100, 0.3)) * 1.5;
+
+  Object.assign(overlay.style, {
+    position: 'absolute',
+    top: `${img.offsetTop}px`,
+    left: `${img.offsetLeft}px`,
+    width: `${img.offsetWidth}px`,
+    height: `${img.offsetHeight}px`,
+    backgroundColor: `rgba(229, 57, 53, ${intensity})`,
+    pointerEvents: 'none',
+    zIndex: '9998',
+    borderRadius: '6px',
+  });
+
+  const parent = img.parentElement;
+  if (parent && getComputedStyle(parent).position === 'static') {
+    parent.style.position = 'relative';
+  }
+
+  parent.appendChild(overlay);
 }
 
 // === Add hover listeners to an image ===
@@ -63,14 +89,16 @@ function processImage(img) {
   if (!isLargeAndNotIcon(img)) return;
   if (img.dataset.aiProcessed === 'true') return;
 
-  const confidence = Math.floor(Math.random() * 101);
-  img.dataset.aiConfidence = confidence;
+  let confidence = Number(img.dataset.aiConfidence);
+  if (!confidence) {
+    confidence = Math.floor(Math.random() * 101);
+    img.dataset.aiConfidence = confidence;
+  }
+
   img.dataset.aiProcessed = 'true';
 
   if (confidence > 70) {
-    // Use outline instead of border to avoid layout shifts on the page
-    img.style.outline = '4px solid #e53935';
-    img.style.borderRadius = '6px';
+    createHeatmapOverlay(img, confidence);
     img.dataset.aiFlagged = 'true';
     attachHoverEvents(img, confidence);
     flaggedImages.push(img.src);
@@ -79,6 +107,7 @@ function processImage(img) {
 
   scannedCount++;
 }
+
 
 // === Observe images entering the viewport ===
 const observer = new IntersectionObserver((entries) => {
@@ -94,18 +123,16 @@ function observeImages() {
   images.forEach(img => observer.observe(img));
 }
 
-// Watch for images added dynamically (lazy-loaded or inserted later) and observe/process them.
+// === Watch for dynamically added images ===
 function watchForNewImages() {
   const mo = new MutationObserver(mutations => {
     for (const m of mutations) {
       for (const node of m.addedNodes) {
         if (!(node instanceof Element)) continue;
-        // If an img node was added directly
         if (node.tagName && node.tagName.toLowerCase() === 'img') {
           const img = node;
           observer.observe(img);
           if (img.complete) {
-            // already loaded
             try { processImage(img); } catch (e) { console.warn('processImage error on added img:', e); }
           } else {
             img.addEventListener('load', function onLoad() {
@@ -114,7 +141,6 @@ function watchForNewImages() {
             });
           }
         } else {
-          // If a subtree containing images was added, find them
           const imgs = node.querySelectorAll ? node.querySelectorAll('img') : [];
           imgs.forEach(img => {
             observer.observe(img);
@@ -135,18 +161,14 @@ function watchForNewImages() {
   mo.observe(document.documentElement || document.body, { childList: true, subtree: true });
 }
 
-// === Data storage for this content script ===
+// === Data storage ===
 let flaggedImages = [];
 let confidences = [];
 let scannedCount = 0;
-let currentIndex = 0;
 
-// === Respond to popup requests ===
-// When the popup sends { type: 'check-images' } we scan visible images and return results.
+// === Message listener ===
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'check-images') {
-    // Build results by reading per-image dataset attributes so previously-processed images are included.
-    // Also process any unprocessed images to pick up newly-loaded images.
     const images = Array.from(document.querySelectorAll('img'));
     let scanned = 0;
     const foundFlagged = [];
@@ -155,7 +177,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     images.forEach(img => {
       try {
         if (img.dataset.aiProcessed !== 'true') {
-          // Process new images (this will set dataset flags on the element)
           processImage(img);
         }
         if (img.dataset.aiProcessed === 'true') scanned++;
@@ -177,16 +198,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } catch (err) {
       console.error('Error sending response from content script:', err);
     }
-    return; // no async response
+    return;
   }
-  
-  // Explicit highlight request (popup -> content): apply highlights for given image URLs
+
   if (message.type === 'apply-highlights') {
     try {
       const urls = message.flaggedImages || [];
       const confs = message.confidences || [];
       urls.forEach((url, i) => {
-        // Normalize the target URL and try several matching strategies
         let target = url;
         try { target = decodeURI(url); } catch (e) {}
         function normalize(u) {
@@ -199,7 +218,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const normSrc = normalize(src);
           if (normSrc === normTarget) return true;
           if (src === url || src === target) return true;
-          // fallback: compare filenames
           try {
             const srcName = normSrc.split('/').pop();
             const tgtName = normTarget.split('/').pop();
@@ -207,19 +225,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           } catch (e) {}
           return false;
         });
+
         imgs.forEach(img => {
           try {
-            img.style.outline = '4px solid #e53935';
-            img.style.borderRadius = '6px';
             img.dataset.aiFlagged = 'true';
             img.dataset.aiConfidence = String(confs[i] || img.dataset.aiConfidence || 0);
+            createHeatmapOverlay(img, Number(img.dataset.aiConfidence) || 0);
             attachHoverEvents(img, Number(img.dataset.aiConfidence) || 0);
           } catch (e) {
             console.warn('Error applying highlight to image:', e);
           }
         });
       });
-      // Acknowledge
       sendResponse({ applied: true });
     } catch (err) {
       console.error('Error in apply-highlights handler:', err);
@@ -228,7 +245,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 });
-
 // === Initialize content script on page ===
 // Initialize content script immediately if the document is already loaded (injection after load case)
 function initContentScript() {
