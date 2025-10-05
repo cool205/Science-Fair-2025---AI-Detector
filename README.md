@@ -5,3 +5,10 @@
 Ai Training trains the AI that I will use for Chrome Extension
 
 Chrome Extension is the code to build the extension in Web Store
+
+
+
+Credits to these datasets
+
+https://www.kaggle.com/datasets/birdy654/cifake-real-and-ai-generated-synthetic-images/data
+

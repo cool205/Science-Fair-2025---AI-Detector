@@ -36,7 +36,7 @@ normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
 def make_train_transform(color_jitter_strength=0.2):
     # color_jitter_strength controls brightness/contrast/saturation and hue small value
     return transforms.Compose([
-        transforms.Resize((32, 32)),
+        transforms.Resize((128, 128)),
         transforms.RandomResizedCrop(32, scale=(0.8, 1.0)),
         transforms.RandomHorizontalFlip(),
         transforms.RandomRotation(15),
