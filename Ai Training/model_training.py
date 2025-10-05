@@ -25,9 +25,9 @@ def get_mobilenetv2(num_classes=2, dropout_rate=0.6):
 learning_rate = 0.0001
 batch_size = 64
 dropout_rate = 0.6
-epochs = 10
+epochs = 20
 LOG_FILE = "accuracy_log.txt"
-DATASET_PATH = r'data/train'
+DATASET_PATH = r'AI Training/data/train'
 
 # Transforms
 normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
