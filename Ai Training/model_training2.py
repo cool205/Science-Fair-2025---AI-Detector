@@ -12,10 +12,7 @@ Hyperparameters are set from the requested list (inferred mapping):
   epochs=29, dropout=0.6, batch_size=64, learning_rate=0.001,
   color_jitter=0.2, num_workers=17
 This script trains once and saves the final model to disk.
-"""
-
-print("Program Running: single run")
-
+""" 
 # Model setup
 def get_mobilenetv2(num_classes=2, dropout_rate=0.6):
     model = models.mobilenet_v2(weights=None)

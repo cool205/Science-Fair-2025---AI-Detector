@@ -1,0 +1,59 @@
+epoch,train_acc,val_acc
+Epoch 1, Train Accuracy: 79.98%, Validation Accuracy: 88.37%
+1,0.7998,0.8837
+Epoch 2, Train Accuracy: 89.21%, Validation Accuracy: 91.74%
+2,0.8921,0.9174
+Epoch 3, Train Accuracy: 90.98%, Validation Accuracy: 92.16%
+3,0.9098,0.9216
+Epoch 4, Train Accuracy: 91.93%, Validation Accuracy: 92.70%
+4,0.9193,0.9271
+Epoch 5, Train Accuracy: 92.61%, Validation Accuracy: 93.36%
+5,0.9261,0.9336
+Epoch 6, Train Accuracy: 93.14%, Validation Accuracy: 92.86%
+6,0.9314,0.9286
+Epoch 7, Train Accuracy: 93.55%, Validation Accuracy: 94.02%
+7,0.9355,0.9402
+Epoch 8, Train Accuracy: 93.77%, Validation Accuracy: 93.25%
+8,0.9377,0.9325
+Epoch 9, Train Accuracy: 94.02%, Validation Accuracy: 94.50%
+9,0.9402,0.9450
+Epoch 10, Train Accuracy: 94.24%, Validation Accuracy: 94.23%
+10,0.9424,0.9423
+Epoch 11, Train Accuracy: 94.33%, Validation Accuracy: 93.98%
+11,0.9433,0.9398
+Epoch 12, Train Accuracy: 94.45%, Validation Accuracy: 93.84%
+12,0.9445,0.9384
+Epoch 13, Train Accuracy: 94.52%, Validation Accuracy: 94.69%
+13,0.9452,0.9469
+Epoch 14, Train Accuracy: 94.71%, Validation Accuracy: 94.47%
+14,0.9471,0.9446
+Epoch 15, Train Accuracy: 94.73%, Validation Accuracy: 94.73%
+15,0.9474,0.9474
+Epoch 16, Train Accuracy: 94.73%, Validation Accuracy: 92.17%
+16,0.9473,0.9217
+Epoch 17, Train Accuracy: 94.84%, Validation Accuracy: 93.97%
+17,0.9484,0.9397
+Epoch 18, Train Accuracy: 94.91%, Validation Accuracy: 94.72%
+18,0.9491,0.9472
+Epoch 19, Train Accuracy: 94.98%, Validation Accuracy: 95.46%
+19,0.9498,0.9546
+Epoch 20, Train Accuracy: 95.05%, Validation Accuracy: 94.16%
+20,0.9505,0.9416
+Epoch 21, Train Accuracy: 95.10%, Validation Accuracy: 94.84%
+21,0.9510,0.9484
+Epoch 22, Train Accuracy: 94.98%, Validation Accuracy: 95.12%
+22,0.9498,0.9512
+Epoch 23, Train Accuracy: 95.15%, Validation Accuracy: 94.84%
+23,0.9515,0.9484
+Epoch 24, Train Accuracy: 95.97%, Validation Accuracy: 95.36%
+24,0.9597,0.9536
+Epoch 25, Train Accuracy: 96.17%, Validation Accuracy: 95.64%
+25,0.9617,0.9564
+Epoch 26, Train Accuracy: 96.29%, Validation Accuracy: 95.21%
+26,0.9629,0.9521
+Epoch 27, Train Accuracy: 96.26%, Validation Accuracy: 95.53%
+27,0.9626,0.9554
+Epoch 28, Train Accuracy: 96.40%, Validation Accuracy: 95.59%
+28,0.9640,0.9559
+Epoch 29, Train Accuracy: 96.40%, Validation Accuracy: 95.33%
+29,0.9640,0.9533
